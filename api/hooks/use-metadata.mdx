@@ -1,0 +1,363 @@
+---
+title: "useMetadata"
+description: "Dynamic SEO and document metadata management"
+---
+
+## Overview
+
+Manages SEO and document metadata (title, canonical URL, OpenGraph tags, Twitter cards) dynamically. During server-side rendering, metadata is buffered to be injected into static HTML.
+
+<Note>
+This hook updates client-side metadata only. For server-side rendering and SEO crawlers, metadata should be set during the SSR phase.
+</Note>
+
+## Signature
+
+```typescript
+function useMetadata(
+  tags?: Record<string, string>,
+  options?: {
+    title?: {
+      template?: string,
+      prefix?: string
+    }
+  }
+): void
+```
+
+<ParamField path="tags" type="Record<string, string>">
+  Object containing metadata tags. Special keys: `title`, `pageTitle`, `canonical`. Other keys become meta tags.
+</ParamField>
+
+<ParamField path="options" type="object">
+  Configuration options for metadata behavior.
+
+  <ParamField path="options.title.template" type="string">
+    Template for the page title. Use `%s` as a placeholder for the actual title (e.g., `"%s | My App"`).
+  </ParamField>
+
+  <ParamField path="options.title.prefix" type="string">
+    Default title when no specific page title is provided. Defaults to `"Ryunix App"`.
+  </ParamField>
+</ParamField>
+
+## Usage
+
+### Basic Title
+
+```javascript
+import { useMetadata } from '@ryunixjs/core'
+
+const AboutPage = () => {
+  useMetadata({
+    title: 'About Us'
+  })
+
+  return <div>About page content</div>
+}
+
+// Sets document.title = "About Us"
+```
+
+### Title with Template
+
+```javascript
+const BlogPost = ({ post }) => {
+  useMetadata(
+    {
+      pageTitle: post.title
+    },
+    {
+      title: {
+        template: '%s | My Blog',
+        prefix: 'My Blog'
+      }
+    }
+  )
+
+  return <article>{post.content}</article>
+}
+
+// For post.title = "Getting Started with RyunixJS"
+// Sets document.title = "Getting Started with RyunixJS | My Blog"
+```
+
+### SEO Meta Tags
+
+```javascript
+const ProductPage = ({ product }) => {
+  useMetadata({
+    title: product.name,
+    description: product.description,
+    keywords: product.tags.join(', '),
+    canonical: `https://example.com/products/${product.slug}`,
+    // OpenGraph tags
+    'og:title': product.name,
+    'og:description': product.description,
+    'og:image': product.image,
+    'og:type': 'product',
+    'og:url': `https://example.com/products/${product.slug}`,
+    // Twitter Card
+    'twitter:card': 'summary_large_image',
+    'twitter:title': product.name,
+    'twitter:description': product.description,
+    'twitter:image': product.image
+  })
+
+  return <div>{product.name}</div>
+}
+```
+
+### Dynamic Route Metadata
+
+```javascript
+import { useRouter, useMetadata } from '@ryunixjs/core'
+
+const UserProfile = () => {
+  const { params } = useRouter()
+  const [user, setUser] = useStore(null)
+
+  useEffect(() => {
+    fetch(`/api/users/${params.id}`)
+      .then(r => r.json())
+      .then(setUser)
+  }, [params.id])
+
+  useMetadata(
+    user ? {
+      title: `${user.name}'s Profile`,
+      description: user.bio,
+      'og:title': user.name,
+      'og:image': user.avatar,
+      canonical: `https://example.com/users/${user.username}`
+    } : {
+      title: 'Loading...'
+    },
+    {
+      title: {
+        template: '%s | My Social Network'
+      }
+    }
+  )
+
+  if (!user) return <div>Loading...</div>
+  return <div>{user.name}</div>
+}
+```
+
+### Blog with Article Schema
+
+```javascript
+const BlogPost = ({ post }) => {
+  useMetadata({
+    title: post.title,
+    description: post.excerpt,
+    canonical: `https://blog.example.com/${post.slug}`,
+    author: post.author.name,
+    'article:published_time': post.publishedAt,
+    'article:modified_time': post.updatedAt,
+    'article:author': post.author.name,
+    'article:section': post.category,
+    'article:tag': post.tags.join(','),
+    'og:title': post.title,
+    'og:description': post.excerpt,
+    'og:type': 'article',
+    'og:url': `https://blog.example.com/${post.slug}`,
+    'og:image': post.coverImage,
+    'twitter:card': 'summary_large_image',
+    'twitter:title': post.title,
+    'twitter:description': post.excerpt,
+    'twitter:image': post.coverImage,
+    'twitter:creator': post.author.twitter
+  })
+
+  return (
+    <article>
+      <h1>{post.title}</h1>
+      <div>{post.content}</div>
+    </article>
+  )
+}
+```
+
+### Multi-Language Support
+
+```javascript
+const LocalizedPage = ({ language }) => {
+  const titles = {
+    en: 'Welcome',
+    es: 'Bienvenido',
+    fr: 'Bienvenue'
+  }
+
+  const descriptions = {
+    en: 'Welcome to our application',
+    es: 'Bienvenido a nuestra aplicación',
+    fr: 'Bienvenue dans notre application'
+  }
+
+  useMetadata({
+    title: titles[language],
+    description: descriptions[language],
+    'og:locale': language === 'en' ? 'en_US' : language === 'es' ? 'es_ES' : 'fr_FR'
+  })
+
+  return <div>{titles[language]}</div>
+}
+```
+
+### E-commerce Product
+
+```javascript
+const ProductDetail = ({ product }) => {
+  useMetadata({
+    title: product.name,
+    description: product.description,
+    canonical: `https://shop.example.com/products/${product.id}`,
+    'og:title': product.name,
+    'og:description': product.description,
+    'og:image': product.images[0],
+    'og:type': 'product',
+    'og:url': `https://shop.example.com/products/${product.id}`,
+    'product:price:amount': product.price,
+    'product:price:currency': 'USD',
+    'product:availability': product.inStock ? 'in stock' : 'out of stock',
+    'twitter:card': 'product',
+    'twitter:title': product.name,
+    'twitter:description': product.description,
+    'twitter:image': product.images[0],
+    'twitter:label1': 'Price',
+    'twitter:data1': `$${product.price}`,
+    'twitter:label2': 'Availability',
+    'twitter:data2': product.inStock ? 'In Stock' : 'Out of Stock'
+  })
+
+  return <div>{product.name}</div>
+}
+```
+
+## Tag Processing
+
+### Special Keys
+
+- **`title`** or **`pageTitle`**: Sets `document.title` (with template if provided)
+- **`canonical`**: Creates or updates `<link rel="canonical">`
+
+### Meta Tag Detection
+
+```javascript
+// Property-based (OpenGraph, Twitter)
+'og:title' → <meta property="og:title" content="..." />
+'twitter:card' → <meta property="twitter:card" content="..." />
+
+// Name-based (standard meta tags)
+'description' → <meta name="description" content="..." />
+'keywords' → <meta name="keywords" content="..." />
+'author' → <meta name="author" content="..." />
+```
+
+## Title Processing
+
+```javascript
+// No template
+useMetadata({ title: 'About' })
+// → document.title = "About"
+
+// With template
+useMetadata(
+  { pageTitle: 'About' },
+  { title: { template: '%s | My App' } }
+)
+// → document.title = "About | My App"
+
+// No title provided, uses prefix
+useMetadata(
+  {},
+  { title: { prefix: 'My App' } }
+)
+// → document.title = "My App"
+
+// Empty title, uses default
+useMetadata({ title: '' })
+// → document.title = "Ryunix App"
+```
+
+## Server-Side Rendering
+
+During SSR, metadata is stored in `state.ssrMetadata`:
+
+```javascript
+// Server-side
+const state = getState()
+if (state.isServerRendering) {
+  state.ssrMetadata = { ...state.ssrMetadata, ...tags }
+}
+
+// Later, inject into HTML
+const htmlString = renderToString(app)
+const metadata = state.ssrMetadata
+// Use metadata to build <head> tags
+```
+
+## Behavior
+
+- During SSR, metadata is collected but not applied to the document
+- On the client, `useEffect` runs after render to update `document.title` and meta tags
+- Tags are created if they don't exist, or updated if they do
+- Changes to `tags` or `options` trigger re-runs (compared via `JSON.stringify`)
+- Runs only in browser environment (checks `typeof document !== 'undefined'`)
+
+## Common Meta Tags Reference
+
+### Standard HTML Meta Tags
+```javascript
+{
+  description: 'Page description',
+  keywords: 'keyword1, keyword2, keyword3',
+  author: 'Author Name',
+  viewport: 'width=device-width, initial-scale=1',
+  robots: 'index, follow',
+  'theme-color': '#ffffff'
+}
+```
+
+### OpenGraph (Facebook, LinkedIn)
+```javascript
+{
+  'og:title': 'Page Title',
+  'og:description': 'Page description',
+  'og:type': 'website', // or 'article', 'product', etc.
+  'og:url': 'https://example.com/page',
+  'og:image': 'https://example.com/image.jpg',
+  'og:site_name': 'Site Name',
+  'og:locale': 'en_US'
+}
+```
+
+### Twitter Card
+```javascript
+{
+  'twitter:card': 'summary_large_image', // or 'summary', 'player', 'app'
+  'twitter:site': '@username',
+  'twitter:creator': '@username',
+  'twitter:title': 'Page Title',
+  'twitter:description': 'Page description',
+  'twitter:image': 'https://example.com/image.jpg'
+}
+```
+
+## Best Practices
+
+- Use `pageTitle` with `template` for consistent branding
+- Include canonical URLs to avoid duplicate content issues
+- Provide both OpenGraph and Twitter Card tags for social sharing
+- Keep descriptions between 150-160 characters for search results
+- Use absolute URLs for images and canonical links
+- Update metadata when route or content changes
+- For SSR, ensure metadata is set before rendering
+
+## Related Hooks
+
+- [useRouter](/api/hooks/use-router) - For route-based metadata
+- [useEffect](/api/hooks/use-effect) - Understanding the update mechanism
+- [useStore](/api/hooks/use-store) - For managing dynamic metadata state

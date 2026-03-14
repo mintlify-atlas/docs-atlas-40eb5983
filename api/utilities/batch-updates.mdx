@@ -1,0 +1,88 @@
+---
+title: "batchUpdates"
+description: "Batch multiple state updates to improve performance"
+---
+
+## batchUpdates
+
+Batches multiple state updates together and flushes them all at once, reducing the number of re-renders.
+
+```javascript
+import { batchUpdates } from '@ryunixjs/core'
+
+batchUpdates(() => {
+  // Multiple updates here
+})
+```
+
+<ParamField path="callback" type="Function" required>
+  A function containing multiple updates to be batched together. All updates within this callback will be processed as a single batch.
+</ParamField>
+
+### Example
+
+```javascript
+import { batchUpdates } from '@ryunixjs/core'
+import { useState } from '@ryunixjs/core'
+
+function MyComponent() {
+  const [count, setCount] = useState(0)
+  const [name, setName] = useState('')
+  const [items, setItems] = useState([])
+
+  const handleMultipleUpdates = () => {
+    // Without batchUpdates: triggers 3 re-renders
+    // setCount(1)
+    // setName('Updated')
+    // setItems([1, 2, 3])
+
+    // With batchUpdates: triggers only 1 re-render
+    batchUpdates(() => {
+      setCount(1)
+      setName('Updated')
+      setItems([1, 2, 3])
+    })
+  }
+
+  return <button onClick={handleMultipleUpdates}>Update All</button>
+}
+```
+
+### Nested Batching
+
+```javascript
+import { batchUpdates } from '@ryunixjs/core'
+
+// Nested batches are supported
+batchUpdates(() => {
+  setState1(value1)
+  
+  batchUpdates(() => {
+    setState2(value2)
+    setState3(value3)
+  })
+  
+  setState4(value4)
+})
+// All updates flushed together after outermost batch completes
+```
+
+### Use Cases
+
+- **Event Handlers**: When handling events that trigger multiple state updates
+- **Data Processing**: When processing data that affects multiple state variables
+- **API Responses**: When updating multiple pieces of state from a single API response
+- **Performance Optimization**: Reducing re-renders in performance-critical sections
+
+### How It Works
+
+1. When `batchUpdates` is called, it sets an internal batching flag
+2. All state updates within the callback are queued instead of executed immediately
+3. Once the callback completes, all queued updates are flushed together
+4. This results in a single re-render instead of multiple re-renders
+
+### Notes
+
+- Batching is automatically enabled during event handlers in most cases
+- Use `batchUpdates` explicitly for async operations or timeouts
+- Updates are executed in the order they were queued

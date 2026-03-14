@@ -1,0 +1,416 @@
+---
+title: Server Components
+description: Build hybrid applications with server-side rendering, streaming, and selective hydration
+---
+
+RyunixJS provides comprehensive server-side rendering capabilities with support for synchronous string rendering, streaming, Suspense, and server boundaries. This enables you to build performant applications with optimal initial load times.
+
+## Server-Side Rendering
+
+### renderToString
+
+Synchronously renders a component tree to an HTML string:
+
+```javascript
+import { renderToString } from '@unsetsoft/ryunixjs'
+import App from './App'
+
+const html = renderToString(<App />)
+console.log(html) // '<div>...</div>'
+```
+
+Source: `packages/core/src/lib/server.js:371-381`
+
+**Features:**
+- Synchronous rendering
+- HTML entity escaping for XSS prevention
+- Style object to CSS string conversion
+- SVG attribute handling
+- Context provider support
+- Island component marking
+
+### HTML Escaping
+
+All user content is automatically escaped to prevent XSS attacks:
+
+```javascript
+const escapeHtml = (unsafe) => {
+  if (typeof unsafe !== 'string') return String(unsafe)
+  return unsafe
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;')
+}
+```
+
+Source: `packages/core/src/lib/server.js:5-13`
+
+### Style Rendering
+
+Inline styles are converted from objects to CSS strings:
+
+```javascript
+import { renderToString } from '@unsetsoft/ryunixjs'
+
+const Component = () => (
+  <div style={{ backgroundColor: 'red', fontSize: '16px' }}>
+    Styled content
+  </div>
+)
+
+const html = renderToString(<Component />)
+// <div style="background-color:red;font-size:16px">Styled content</div>
+```
+
+## Streaming SSR
+
+### renderToReadableStream
+
+Asynchronously renders to a Web ReadableStream for optimal performance:
+
+```javascript
+import { renderToReadableStream } from '@unsetsoft/ryunixjs'
+import App from './App'
+
+// In your server handler
+export async function handler(req, res) {
+  const stream = renderToReadableStream(<App />)
+  
+  // Return as response
+  return new Response(stream, {
+    headers: { 'Content-Type': 'text/html' }
+  })
+}
+```
+
+Source: `packages/core/src/lib/server.js:329-369`
+
+**Benefits:**
+- Stream HTML as it's generated
+- Better Time to First Byte (TTFB)
+- Progressive rendering
+- Native Suspense support
+- Out-of-order streaming
+
+### Suspense Streaming
+
+The streaming renderer handles Suspense boundaries automatically:
+
+```javascript
+import { Suspense, lazy } from '@unsetsoft/ryunixjs'
+
+const HeavyComponent = lazy(() => import('./HeavyComponent'))
+
+const App = () => (
+  <div>
+    <h1>My App</h1>
+    <Suspense fallback={<div>Loading...</div>}>
+      <HeavyComponent />
+    </Suspense>
+  </div>
+)
+```
+
+How it works:
+1. Renders fallback content immediately
+2. Starts loading the actual content in background
+3. Streams a `<template>` with the real content when ready
+4. Executes inline script to swap fallback with real content
+
+Source: `packages/core/src/lib/server.js:209-243`
+
+<Warning>
+  Streaming SSR requires a runtime that supports Web Streams API (Node.js 16.5+, Deno, Cloudflare Workers, etc.)
+</Warning>
+
+## Server Boundaries
+
+Server boundaries mark content that should remain server-rendered and skip client-side hydration:
+
+```javascript
+import { ServerBoundary } from '@unsetsoft/ryunixjs'
+
+const BlogPost = ({ content }) => (
+  <article>
+    <header>
+      <h1>My Blog Post</h1>
+    </header>
+    
+    {/* This content stays server-rendered, never hydrated */}
+    <ServerBoundary id="blog-content">
+      <div dangerouslySetInnerHTML={{ __html: content }} />
+    </ServerBoundary>
+    
+    {/* This part is interactive */}
+    <CommentSection />
+  </article>
+)
+```
+
+Source: `packages/core/src/lib/serverBoundary.js:1-15`
+
+**Use Cases:**
+- Static HTML content
+- Server-rendered markdown
+- Content that doesn't need interactivity
+- Reducing JavaScript bundle size
+
+### How Server Boundaries Work
+
+1. **Server-Side**: Renders children normally to HTML
+2. **Client-Side**: Wraps in `<div data-ryunix-server="id" style="display: contents">`
+3. **Hydration**: Skips hydrating children inside the boundary
+
+```javascript
+export function ServerBoundary({ children, id }) {
+  return createElement('div', {
+    'data-ryunix-server': id,
+    style: { display: 'contents' }
+  }, children)
+}
+```
+
+<Tip>
+  Use `display: contents` to make the boundary wrapper invisible in the layout, preventing any visual impact.
+</Tip>
+
+## Island Architecture Integration
+
+Server components work seamlessly with island architecture:
+
+```javascript
+import { renderToString, ServerBoundary } from '@unsetsoft/ryunixjs'
+import { island } from '@unsetsoft/ryunix-webpack'
+
+// Mark as island (hydrated on client)
+const InteractiveWidget = island(({ data }) => {
+  const [count, setCount] = useStore(0)
+  return <button onClick={() => setCount(count + 1)}>{count}</button>
+}, 'InteractiveWidget')
+
+// Server component (not hydrated)
+const StaticContent = ({ html }) => (
+  <ServerBoundary id="static">
+    <div dangerouslySetInnerHTML={{ __html: html }} />
+  </ServerBoundary>
+)
+
+const Page = () => (
+  <div>
+    <StaticContent html="<p>This is server-rendered only</p>" />
+    <InteractiveWidget data={...} />
+  </div>
+)
+
+const html = renderToString(<Page />)
+```
+
+Rendered HTML:
+
+```html
+<div>
+  <div data-ryunix-server="static" style="display: contents">
+    <p>This is server-rendered only</p>
+  </div>
+  <div data-ryunix-island="InteractiveWidget" data-props='{"data":{...}}'>
+    <button>0</button>
+  </div>
+</div>
+```
+
+## Context Providers in SSR
+
+Context providers work transparently in server rendering:
+
+```javascript
+import { createContext, renderToString } from '@unsetsoft/ryunixjs'
+
+const { Provider, useContext } = createContext('theme', 'light')
+
+const ThemedButton = () => {
+  const theme = useContext()
+  return <button className={`btn-${theme}`}>Click me</button>
+}
+
+const App = () => (
+  <Provider value="dark">
+    <ThemedButton />
+  </Provider>
+)
+
+const html = renderToString(<App />)
+// <button class="btn-dark">Click me</button>
+```
+
+Context values are maintained during SSR in `state.ssrContexts`.
+
+Source: `packages/core/src/lib/server.js:50-74`
+
+## Async Server Components
+
+With streaming, components can be async and suspend:
+
+```javascript
+const UserProfile = async ({ userId }) => {
+  // This runs on the server
+  const user = await fetchUser(userId)
+  
+  return (
+    <div>
+      <h2>{user.name}</h2>
+      <p>{user.bio}</p>
+    </div>
+  )
+}
+
+const Page = () => (
+  <Suspense fallback={<div>Loading user...</div>}>
+    <UserProfile userId="123" />
+  </Suspense>
+)
+
+// Use streaming
+const stream = renderToReadableStream(<Page />)
+```
+
+The stream will:
+1. Immediately send fallback HTML
+2. Fetch user data on server
+3. Stream the real content when ready
+4. Update DOM automatically
+
+## Void Elements
+
+Self-closing elements are rendered correctly:
+
+```javascript
+const VOID_ELEMENTS = new Set([
+  'area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input',
+  'link', 'meta', 'param', 'source', 'track', 'wbr'
+])
+
+// Renders as <img src="..." />
+renderToString(<img src="photo.jpg" alt="Photo" />)
+```
+
+Source: `packages/core/src/lib/server.js:23-26`
+
+## Event Handlers in SSR
+
+Event handlers are automatically stripped during server rendering:
+
+```javascript
+const Button = () => (
+  <button onClick={() => alert('clicked')}>Click me</button>
+)
+
+// Server renders as:
+// <button>Click me</button>
+
+// Client hydration attaches the onClick handler
+```
+
+Source: `packages/core/src/lib/server.js:116-124`
+
+## Best Practices
+
+### 1. Use Streaming for Large Pages
+
+```javascript
+// ❌ Bad: Blocks until entire page renders
+const html = renderToString(<LargePage />)
+
+// ✅ Good: Streams content progressively
+const stream = renderToReadableStream(<LargePage />)
+```
+
+### 2. Wrap Static Content in ServerBoundary
+
+```javascript
+// ✅ Good: Reduces hydration cost
+const Article = ({ content }) => (
+  <ServerBoundary id="article-content">
+    <div dangerouslySetInnerHTML={{ __html: content }} />
+  </ServerBoundary>
+)
+```
+
+### 3. Use Suspense for Async Data
+
+```javascript
+// ✅ Good: Progressive rendering with fallback
+const Dashboard = () => (
+  <>
+    <Header />
+    <Suspense fallback={<Skeleton />}>
+      <AsyncDataComponent />
+    </Suspense>
+  </>
+)
+```
+
+### 4. Avoid Side Effects in Server Components
+
+```javascript
+// ❌ Bad: Side effects don't work in SSR
+const Component = () => {
+  useEffect(() => {
+    trackPageView() // Won't run on server
+  })
+  return <div>Content</div>
+}
+
+// ✅ Good: Check environment
+const Component = () => {
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      trackPageView()
+    }
+  })
+  return <div>Content</div>
+}
+```
+
+## Performance Optimization
+
+### Reduce Hydration Cost
+
+```javascript
+import { ServerBoundary } from '@unsetsoft/ryunixjs'
+
+// Wrap large static sections
+const LandingPage = () => (
+  <>
+    <ServerBoundary id="hero">
+      <Hero /> {/* 100kb of static HTML */}
+    </ServerBoundary>
+    
+    <InteractiveForm /> {/* Only this gets hydrated */}
+  </>
+)
+```
+
+### Optimize Bundle Size
+
+Only send JavaScript for interactive components:
+
+```javascript
+// static.jsx - Server only
+export const StaticFooter = () => (
+  <ServerBoundary id="footer">
+    <footer>© 2026 My Company</footer>
+  </ServerBoundary>
+)
+
+// interactive.jsx - Island for client
+export const Newsletter = island(({ api }) => {
+  const [email, setEmail] = useStore('')
+  // ... interactive logic
+}, 'Newsletter')
+```
+
+<Tip>
+  Combine ServerBoundary with island architecture to minimize JavaScript bundle size while maintaining server-rendered SEO-friendly content.
+</Tip>

@@ -1,0 +1,101 @@
+---
+title: ErrorBoundary
+description: Catch JavaScript errors in component trees and display fallback UI
+---
+
+## Overview
+
+ErrorBoundary is a native RyunixJS component that catches JavaScript errors anywhere in its child component tree, logs those errors, and displays a fallback UI instead of the component tree that crashed.
+
+It hooks directly into the `performUnitOfWork` reconciler loop to intercept errors during rendering, lifecycle methods, and event handlers.
+
+## Import
+
+```javascript
+import { ErrorBoundary } from 'ryunixjs'
+```
+
+## Props
+
+<ParamField path="children" type="ReactNode" required>
+  The component tree to monitor for errors. If any component in this tree throws an error, the ErrorBoundary will catch it and render the fallback instead.
+</ParamField>
+
+<ParamField path="fallback" type="ReactNode | ((error: Error) => ReactNode)" required>
+  The fallback UI to display when an error is caught. Can be either:
+  - A static element or component
+  - A function that receives the error object and returns UI
+</ParamField>
+
+## Usage
+
+### Basic Usage
+
+Wrap components that might throw errors with an ErrorBoundary:
+
+```javascript
+import { ErrorBoundary } from 'ryunixjs'
+
+function App() {
+  return (
+    <ErrorBoundary fallback={<div>Something went wrong</div>}>
+      <MyComponent />
+    </ErrorBoundary>
+  )
+}
+```
+
+### Dynamic Fallback with Error Details
+
+Use a function to access the error object:
+
+```javascript
+import { ErrorBoundary } from 'ryunixjs'
+
+function App() {
+  return (
+    <ErrorBoundary 
+      fallback={(error) => (
+        <div>
+          <h1>Error Occurred</h1>
+          <p>{error.message}</p>
+          <pre>{error.stack}</pre>
+        </div>
+      )}
+    >
+      <MyComponent />
+    </ErrorBoundary>
+  )
+}
+```
+
+### Nested Error Boundaries
+
+Use multiple boundaries to provide granular error handling:
+
+```javascript
+function App() {
+  return (
+    <ErrorBoundary fallback={<div>App-level error</div>}>
+      <Header />
+      <ErrorBoundary fallback={<div>Sidebar error</div>}>
+        <Sidebar />
+      </ErrorBoundary>
+      <ErrorBoundary fallback={<div>Content error</div>}>
+        <Content />
+      </ErrorBoundary>
+    </ErrorBoundary>
+  )
+}
+```
+
+## Implementation Details
+
+- Renders a `<ryunix-error-boundary-wrapper>` element with `display: contents` to avoid affecting layout
+- Errors are caught at the reconciler level via `state.wipFiber.stateError`
+- Only catches errors in child components, not in the boundary itself
+- Errors bubble up to the nearest ErrorBoundary ancestor
+
+## Type Marker
+
+ErrorBoundary has a special type marker `RYUNIX_ERROR_BOUNDARY` that the reconciler uses to identify it during error handling.

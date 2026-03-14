@@ -1,0 +1,324 @@
+---
+title: DevTools & Profiler
+description: Debug and optimize your RyunixJS applications with built-in development tools and performance profiling
+---
+
+RyunixJS includes zero-cost runtime utilities that safely compile out of production builds while providing immense insight during development. The framework includes comprehensive developer tools and a powerful profiler for tracking component performance.
+
+## Development Utilities
+
+### Hook Context Validation
+
+The `validateHookContext()` function enforces runtime invariants to prevent common errors. It ensures hooks are only called within the proper render cycle.
+
+```javascript
+import { validateHookContext } from '@unsetsoft/ryunixjs'
+
+// This is automatically called by all hooks
+const validateHookContext = (hookName = 'A hook') => {
+  const state = getState()
+  if (!state.wipFiber) {
+    throw new Error(
+      `${hookName} can only be called inside function components. ` +
+        'Make sure you are calling hooks at the top level of your component.',
+    )
+  }
+  if (!Array.isArray(state.wipFiber.hooks)) {
+    state.wipFiber.hooks = []
+  }
+}
+```
+
+<Warning>
+  Hooks must be called at the top level of your component function, not inside loops, conditions, or nested functions. The validation helps catch these errors early during development.
+</Warning>
+
+### Development Warnings
+
+The framework provides helpful warnings that only appear in development mode:
+
+```javascript
+import { warning, error, deprecated } from '@unsetsoft/ryunixjs'
+
+// Conditional warning
+warning(props.id !== undefined, 'Component requires an id prop')
+
+// Error logging
+error('Invalid component configuration')
+
+// Deprecation notices
+deprecated('oldAPI()', 'newAPI()', 'v2.0')
+```
+
+All development utilities check `process.env.NODE_ENV !== 'production'` and compile out of production builds.
+
+### Component Name Detection
+
+The `getComponentName()` helper extracts component names for better debugging:
+
+```javascript
+const getComponentName = (component) => {
+  if (!component) return 'Unknown'
+  return component.displayName || component.name || 'Anonymous'
+}
+
+// Set displayName for better debugging
+const MyComponent = () => { /* ... */ }
+MyComponent.displayName = 'MyComponent'
+```
+
+## Performance Profiler
+
+The `Profiler` class uses the high-resolution `performance.now()` Web API to track component render times with microsecond precision.
+
+### Basic Profiling
+
+The profiler is automatically available in development mode:
+
+```javascript
+import { profiler } from '@unsetsoft/ryunixjs'
+
+// Profiler is enabled by default in development
+profiler.enabled // true in dev, false in production
+
+// View current statistics
+const stats = profiler.getStats()
+console.log(stats)
+// {
+//   total: 1234.56,
+//   avg: 12.34,
+//   max: 45.67,
+//   min: 2.34,
+//   count: 100
+// }
+
+// Log formatted statistics to console
+profiler.logStats()
+// 🔍 Ryunix Performance Stats
+// Total renders: 100
+// Avg render time: 12.34ms
+// Min: 2.34ms | Max: 45.67ms
+//
+// ⚠️  Slowest components:
+// 1. DataTable: 45.67ms avg (15 renders)
+// 2. ChartWidget: 23.45ms avg (8 renders)
+// ...
+```
+
+### Recording Render Cycles
+
+The profiler automatically buffers the last 100 render records (configurable via `maxSamples`):
+
+```javascript
+// Manually record a render
+profiler.recordRender('MyComponent', 15.67)
+
+// Get slowest components
+const slowest = profiler.getSlowestComponents(10)
+slowest.forEach(comp => {
+  console.log(`${comp.name}: ${comp.avg.toFixed(2)}ms avg`)
+  console.log(`  Max: ${comp.max.toFixed(2)}ms`)
+  console.log(`  Renders: ${comp.count}`)
+})
+```
+
+<Tip>
+  The profiler keeps only the most recent 100 samples by default. This prevents memory leaks while providing enough data for meaningful analysis.
+</Tip>
+
+### Using the Profiler Hook
+
+The `useProfiler` hook automatically tracks component render time:
+
+```javascript
+import { useProfiler } from '@unsetsoft/ryunixjs'
+
+const MyComponent = () => {
+  const endProfile = useProfiler('MyComponent')
+  
+  // Your component logic
+  const data = heavyComputation()
+  
+  // Profiling ends when component function returns
+  return (
+    <div>{data}</div>
+  )
+}
+```
+
+Source: `packages/core/src/lib/profiler.js:128-135`
+
+### Higher-Order Component Profiling
+
+Wrap components with `withProfiler` for automatic performance tracking:
+
+```javascript
+import { withProfiler } from '@unsetsoft/ryunixjs'
+
+const MyComponent = ({ data }) => {
+  return <div>{data.map(item => <Item key={item.id} {...item} />)}</div>
+}
+
+// Wrap with profiler
+const ProfiledComponent = withProfiler(MyComponent, 'MyComponent')
+
+// Now all renders are automatically tracked
+export default ProfiledComponent
+```
+
+Source: `packages/core/src/lib/profiler.js:140-148`
+
+<Warning>
+  Profiling adds overhead to your renders. Only use `withProfiler` on components you're actively optimizing, not across your entire application.
+</Warning>
+
+### Manual Measurements
+
+For fine-grained performance tracking:
+
+```javascript
+import { profiler } from '@unsetsoft/ryunixjs'
+
+const MyComponent = () => {
+  profiler.startMeasure('expensive-operation')
+  
+  // Expensive computation
+  const result = processLargeDataset(data)
+  
+  const duration = profiler.endMeasure('expensive-operation')
+  console.log(`Operation took ${duration}ms`)
+  
+  return <div>{result}</div>
+}
+```
+
+### Profiler API Reference
+
+```javascript
+import { profiler } from '@unsetsoft/ryunixjs'
+
+// Enable/disable profiler
+profiler.enable()
+profiler.disable()
+
+// Start a measurement
+profiler.startMeasure('operation-name')
+
+// End a measurement and get duration
+const duration = profiler.endMeasure('operation-name')
+
+// Record a render manually
+profiler.recordRender('ComponentName', durationMs)
+
+// Get statistics
+const stats = profiler.getStats()
+const slowest = profiler.getSlowestComponents(5)
+
+// Log to console
+profiler.logStats()
+
+// Clear all data
+profiler.clear()
+```
+
+## Performance Tracking Utilities
+
+Additional performance utilities for custom measurements:
+
+```javascript
+import { perfTracker } from '@unsetsoft/ryunixjs'
+
+// Mark a point in time
+perfTracker.mark('start-operation')
+
+// ... do work ...
+
+// Measure duration from mark
+perfTracker.measure('Operation Complete', 'start-operation')
+// [Ryunix Performance] Operation Complete: 123ms
+
+// Clear all marks
+perfTracker.clear()
+```
+
+Source: `packages/core/src/lib/devtools.js:46-66`
+
+## Production Builds
+
+All development utilities are automatically removed in production builds:
+
+```javascript
+// Development build
+if (process.env.NODE_ENV !== 'production') {
+  // DevTools code here - removed in production
+}
+```
+
+This ensures:
+- Zero runtime overhead in production
+- Smaller bundle sizes
+- No console noise for end users
+- Optimal performance
+
+<Tip>
+  Set `NODE_ENV=production` when building for production to automatically strip all development utilities and profiling code.
+</Tip>
+
+## Best Practices
+
+1. **Profile During Development**: Use the profiler to identify slow components early
+2. **Check Slowest Components**: Run `profiler.logStats()` periodically to spot regressions
+3. **Use DisplayName**: Set `displayName` on components for better profiler output
+4. **Targeted Profiling**: Profile specific components with `withProfiler` rather than everything
+5. **Monitor Render Counts**: High render counts often indicate unnecessary re-renders
+
+## Common Patterns
+
+### Debugging Render Performance
+
+```javascript
+import { profiler, useProfiler } from '@unsetsoft/ryunixjs'
+
+const DataTable = ({ data }) => {
+  const endProfile = useProfiler('DataTable')
+  
+  // Check what's causing slow renders
+  useEffect(() => {
+    const stats = profiler.getStats()
+    if (stats.avg > 16.67) {
+      console.warn('DataTable rendering slower than 60fps')
+    }
+  })
+  
+  return (
+    <table>
+      {data.map(row => <TableRow key={row.id} {...row} />)}
+    </table>
+  )
+}
+```
+
+### Performance Budget Monitoring
+
+```javascript
+import { profiler } from '@unsetsoft/ryunixjs'
+
+const PERFORMANCE_BUDGET = 16.67 // 60fps
+
+function checkPerformanceBudget() {
+  const slowest = profiler.getSlowestComponents(5)
+  const violations = slowest.filter(c => c.avg > PERFORMANCE_BUDGET)
+  
+  if (violations.length > 0) {
+    console.warn('⚠️ Performance budget violations:')
+    violations.forEach(comp => {
+      console.warn(`  ${comp.name}: ${comp.avg.toFixed(2)}ms (budget: ${PERFORMANCE_BUDGET}ms)`)
+    })
+  }
+}
+
+// Run periodically in development
+if (process.env.NODE_ENV !== 'production') {
+  setInterval(checkPerformanceBudget, 10000)
+}
+```

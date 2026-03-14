@@ -1,0 +1,687 @@
+---
+title: 'Hooks System'
+description: 'Comprehensive guide to RyunixJS hooks for state management, side effects, and performance optimization'
+---
+
+# Hooks System
+
+RyunixJS provides a comprehensive Hooks API, maintaining familiarity with React while integrating unique features for priority scheduling and routing.
+
+## State Management
+
+### useStore()
+
+The primary state hook for managing component state.
+
+```javascript
+import { useStore } from '@unsetsoft/ryunixjs'
+
+function Counter() {
+  const [count, setCount] = useStore(0)
+
+  return (
+    <div>
+      <p>Count: {count}</p>
+      <button onClick={() => setCount(count + 1)}>Increment</button>
+      <button onClick={() => setCount(prev => prev - 1)}>Decrement</button>
+    </div>
+  )
+}
+```
+
+**Signature** (`hooks.js:25`):
+
+```javascript
+const useStore = (initialState) => {
+  const reducer = (state, action) =>
+    is.function(action) ? action(state) : action
+  return useReducer(reducer, initialState)
+}
+```
+
+<Info>
+Under the hood, `useStore` uses `useReducer`. It returns the current state and a dispatcher function that accepts either a new value or an updater function.
+</Info>
+
+**Features:**
+- Supports functional updates: `setCount(prev => prev + 1)`
+- Server-safe: Returns no-op dispatcher during SSR
+- Batches multiple updates in a single render cycle
+
+### useReducer()
+
+Manages complex state logic with actions and a reducer function.
+
+```javascript
+import { useReducer } from '@unsetsoft/ryunixjs'
+
+const reducer = (state, action) => {
+  switch (action.type) {
+    case 'increment':
+      return { count: state.count + 1 }
+    case 'decrement':
+      return { count: state.count - 1 }
+    case 'reset':
+      return { count: 0 }
+    default:
+      return state
+  }
+}
+
+function Counter() {
+  const [state, dispatch] = useReducer(reducer, { count: 0 })
+
+  return (
+    <div>
+      <p>Count: {state.count}</p>
+      <button onClick={() => dispatch({ type: 'increment' })}>+</button>
+      <button onClick={() => dispatch({ type: 'decrement' })}>-</button>
+      <button onClick={() => dispatch({ type: 'reset' })}>Reset</button>
+    </div>
+  )
+}
+```
+
+**Implementation** (`hooks.js:50`):
+
+```javascript
+const useReducer = (reducer, initialState, init) => {
+  const { wipFiber, hookIndex } = state
+  const oldHook = wipFiber.alternate?.hooks?.[hookIndex]
+
+  const hook = {
+    hookID: hookIndex,
+    type: RYUNIX_TYPES.RYUNIX_STORE,
+    state: oldHook ? oldHook.state : init ? init(initialState) : initialState,
+    queue: [],
+  }
+
+  if (oldHook?.queue) {
+    oldHook.queue.forEach((action) => {
+      hook.state = reducer(hook.state, action)
+    })
+  }
+
+  const dispatch = (action) => {
+    hook.queue.push(action)
+    // ... schedule re-render
+  }
+
+  return [hook.state, dispatch]
+}
+```
+
+<Accordion title="How does dispatch trigger re-renders?">
+When dispatch is called:
+
+1. Action is pushed to the hook's queue
+2. A new `wipRoot` is created with reference to `currentRoot`
+3. `scheduleWork()` is called via `queueUpdate()` for batching
+4. Work loop processes the fiber tree
+5. During reconciliation, queued actions are applied to compute new state
+6. Commit phase updates the DOM
+</Accordion>
+
+### usePersistentStore()
+
+Synchronizes state with `localStorage` for persistence across sessions.
+
+```javascript
+import { usePersistentStore } from '@unsetsoft/ryunixjs'
+
+function ThemeToggle() {
+  const [theme, setTheme] = usePersistentStore('theme', 'light')
+
+  return (
+    <button onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}>
+      Current: {theme}
+    </button>
+  )
+}
+```
+
+**Features** (`hooks.js:722`):
+- Automatically serializes/deserializes JSON
+- Handles localStorage errors gracefully
+- Returns `initialState` if storage is unavailable
+
+```javascript
+const usePersistentStore = (key, initialState = '') => {
+  const [state, dispatch] = useStore(() => {
+    try {
+      const item = window.localStorage.getItem(key)
+      return item ? JSON.parse(item) : initialState
+    } catch (error) {
+      return initialState
+    }
+  })
+
+  const setValue = (value) => {
+    try {
+      dispatch(value)
+      window.localStorage.setItem(key, JSON.stringify(value))
+    } catch (error) {
+      console.error(error)
+    }
+  }
+
+  return [state, setValue]
+}
+```
+
+## Side Effects & Lifecycle
+
+### useEffect()
+
+Runs side effects after the render phase and DOM updates.
+
+```javascript
+import { useEffect, useStore } from '@unsetsoft/ryunixjs'
+
+function UserProfile({ userId }) {
+  const [user, setUser] = useStore(null)
+
+  useEffect(() => {
+    let cancelled = false
+
+    fetch(`/api/users/${userId}`)
+      .then(res => res.json())
+      .then(data => {
+        if (!cancelled) setUser(data)
+      })
+
+    return () => {
+      cancelled = true  // Cleanup function
+    }
+  }, [userId])  // Re-run when userId changes
+
+  return <div>{user?.name}</div>
+}
+```
+
+**Key points:**
+- Effect callbacks execute if dependency array changes
+- Return a cleanup function to cancel subscriptions
+- Runs asynchronously after paint
+- No dependencies (`[]`) = run once after mount
+- No deps array = run after every render
+
+<Warning>
+Effects run asynchronously after the browser has painted. For synchronous DOM measurements, use `useLayoutEffect` instead.
+</Warning>
+
+### useLayoutEffect()
+
+Runs synchronously after DOM mutations but before browser paint.
+
+```javascript
+import { useLayoutEffect, useRef } from '@unsetsoft/ryunixjs'
+
+function Tooltip() {
+  const tooltipRef = useRef()
+
+  useLayoutEffect(() => {
+    // Measure DOM before paint to avoid flicker
+    const rect = tooltipRef.current.getBoundingClientRect()
+    
+    if (rect.right > window.innerWidth) {
+      tooltipRef.current.style.left = 'auto'
+      tooltipRef.current.style.right = '0'
+    }
+  }, [])
+
+  return <div ref={tooltipRef}>Tooltip</div>
+}
+```
+
+**From `hooks.js:780`:**
+
+```javascript
+const hook = {
+  hookID: hookIndex,
+  type: RYUNIX_TYPES.RYUNIX_EFFECT,
+  deps,
+  effect: hasChanged ? callback : null,
+  cancel: oldHook?.cancel,
+  isLayout: true,  // Flag to run synchronously during commit
+}
+```
+
+<Info>
+Layout effects run synchronously during the commit phase (`commitWork`), right after DOM mutations but before the browser paints. This prevents visual flickering.
+</Info>
+
+## Performance & Memoization
+
+### useMemo()
+
+Memoizes expensive computations based on dependencies.
+
+```javascript
+import { useMemo, useStore } from '@unsetsoft/ryunixjs'
+
+function DataTable({ data, filter }) {
+  const filteredData = useMemo(() => {
+    console.log('Filtering data...')  // Only logs when data/filter changes
+    return data.filter(item => item.name.includes(filter))
+  }, [data, filter])
+
+  return (
+    <table>
+      {filteredData.map(item => <tr key={item.id}>...</tr>)}
+    </table>
+  )
+}
+```
+
+**Implementation** (`hooks.js:193`):
+
+```javascript
+const useMemo = (compute, deps) => {
+  const { wipFiber, hookIndex } = state
+  const oldHook = wipFiber.alternate?.hooks?.[hookIndex]
+
+  let value
+  if (oldHook && !haveDepsChanged(oldHook.deps, deps)) {
+    value = oldHook.value  // Return cached value
+  } else {
+    value = compute()  // Recompute
+  }
+
+  const hook = {
+    hookID: hookIndex,
+    type: RYUNIX_TYPES.RYUNIX_MEMO,
+    value,
+    deps,
+  }
+
+  wipFiber.hooks[hookIndex] = hook
+  state.hookIndex++
+  return value
+}
+```
+
+### useCallback()
+
+Memoizes function references to prevent unnecessary child re-renders.
+
+```javascript
+import { useCallback, useStore } from '@unsetsoft/ryunixjs'
+
+function Parent() {
+  const [count, setCount] = useStore(0)
+
+  const handleClick = useCallback(() => {
+    setCount(prev => prev + 1)
+  }, [])  // Function reference never changes
+
+  return <ExpensiveChild onClick={handleClick} />
+}
+```
+
+**From `hooks.js:248`:**
+
+```javascript
+const useCallback = (callback, deps) => {
+  return useMemo(() => callback, deps)
+}
+```
+
+<Tip>
+`useCallback(fn, deps)` is equivalent to `useMemo(() => fn, deps)`. Use it to prevent function recreation when passing callbacks to optimized child components.
+</Tip>
+
+### useRef()
+
+Provides a mutable object that persists across renders without triggering re-renders.
+
+```javascript
+import { useRef, useEffect } from '@unsetsoft/ryunixjs'
+
+function VideoPlayer({ src }) {
+  const videoRef = useRef(null)
+  const playCountRef = useRef(0)
+
+  useEffect(() => {
+    const video = videoRef.current
+    const handlePlay = () => {
+      playCountRef.current += 1
+      console.log('Play count:', playCountRef.current)
+    }
+    video.addEventListener('play', handlePlay)
+    return () => video.removeEventListener('play', handlePlay)
+  }, [])
+
+  return <video ref={videoRef} src={src} />
+}
+```
+
+**Use cases:**
+- Store DOM references
+- Keep mutable values without re-rendering
+- Store previous values across renders
+- Cache timeout/interval IDs
+
+## Concurrent Mode & Priority
+
+### useTransition()
+
+Marks state updates as non-urgent to keep the UI responsive.
+
+```javascript
+import { useTransition, useStore } from '@unsetsoft/ryunixjs'
+
+function SearchResults() {
+  const [query, setQuery] = useStore('')
+  const [results, setResults] = useStore([])
+  const [isPending, startTransition] = useTransition()
+
+  const handleSearch = (e) => {
+    setQuery(e.target.value)  // Urgent: update input immediately
+
+    startTransition(() => {
+      // Non-urgent: heavy filtering can be interrupted
+      const filtered = hugeDataset.filter(item => 
+        item.name.includes(e.target.value)
+      )
+      setResults(filtered)
+    })
+  }
+
+  return (
+    <div>
+      <input value={query} onChange={handleSearch} />
+      {isPending && <Spinner />}
+      <ResultsList results={results} />
+    </div>
+  )
+}
+```
+
+**From `hooks.js:674`:**
+
+```javascript
+const useTransition = () => {
+  const [isPending, setIsPending] = useStorePriority(false)
+
+  const startTransition = (callback) => {
+    setIsPending(true, Priority.IMMEDIATE)
+
+    setTimeout(() => {
+      runWithPriority(Priority.LOW, () => {
+        callback()
+        setIsPending(false, Priority.LOW)
+      })
+    }, 0)
+  }
+
+  return [isPending, startTransition]
+}
+```
+
+<Info>
+`useTransition` dispatches the pending state as `IMMEDIATE` but schedules the actual work as `LOW` priority, yielding the main thread for user interactions.
+</Info>
+
+### useDeferredValue()
+
+Defers updates to a value to prevent UI blocking on fast inputs.
+
+```javascript
+import { useDeferredValue, useStore } from '@unsetsoft/ryunixjs'
+
+function SearchPage() {
+  const [searchTerm, setSearchTerm] = useStore('')
+  const deferredSearchTerm = useDeferredValue(searchTerm)
+
+  // searchTerm updates immediately (input stays responsive)
+  // deferredSearchTerm updates after 100ms debounce
+
+  return (
+    <div>
+      <input value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+      <ExpensiveSearchResults query={deferredSearchTerm} />
+    </div>
+  )
+}
+```
+
+**Implementation** (`hooks.js:694`):
+
+```javascript
+const useDeferredValue = (value) => {
+  const [deferredValue, setDeferredValue] = useStorePriority(value)
+
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      setDeferredValue(value, Priority.LOW)
+    }, 100)
+
+    return () => clearTimeout(timeout)
+  }, [value])
+
+  return deferredValue
+}
+```
+
+## Context
+
+### createContext()
+
+Creates a Context Provider and hook for sharing values across the tree.
+
+```javascript
+import { createContext, useStore } from '@unsetsoft/ryunixjs'
+
+const ThemeContext = createContext('theme', { mode: 'light' })
+
+function App() {
+  const [theme, setTheme] = useStore({ mode: 'light' })
+
+  return (
+    <ThemeContext.Provider value={{ theme, setTheme }}>
+      <Toolbar />
+    </ThemeContext.Provider>
+  )
+}
+
+function Toolbar() {
+  const { theme, setTheme } = ThemeContext.useContext()
+  return <button onClick={() => setTheme({ mode: 'dark' })}>{theme.mode}</button>
+}
+```
+
+**From `hooks.js:269`:**
+
+```javascript
+const createContext = (contextId = RYUNIX_TYPES.RYUNIX_CONTEXT, defaultValue = {}) => {
+  const Provider = ({ value, children }) => {
+    return createElement(
+      RYUNIX_TYPES.RYUNIX_CONTEXT,
+      { value, children, _contextId: contextId },
+      ...flattenArray([children])
+    )
+  }
+
+  const useContext = (ctxID = contextId) => {
+    let fiber = state.wipFiber
+
+    while (fiber) {
+      if (fiber._contextId === ctxID && fiber._contextValue !== undefined) {
+        return fiber._contextValue
+      }
+      fiber = fiber.parent
+    }
+    return defaultValue
+  }
+
+  return { Provider, useContext }
+}
+```
+
+<Accordion title="How does context traversal work?">
+The `useContext` hook walks up the fiber tree (`fiber.parent`) searching for the nearest matching Provider by `_contextId`. This is O(n) in tree depth but typically fast due to shallow component trees.
+</Accordion>
+
+## Routing Hooks
+
+### useRouter()
+
+Returns the router context with location, params, and navigation.
+
+```javascript
+import { useRouter } from '@unsetsoft/ryunixjs'
+
+function ProfilePage() {
+  const { params, query, navigate } = useRouter()
+
+  return (
+    <div>
+      <h1>User: {params.userId}</h1>
+      <p>Tab: {query.tab}</p>
+      <button onClick={() => navigate('/dashboard')}>Go to Dashboard</button>
+    </div>
+  )
+}
+```
+
+### usePathname() & useSearchParams() & useHash()
+
+Utility hooks that extract specific routing information.
+
+```javascript
+import { usePathname, useSearchParams, useHash } from '@unsetsoft/ryunixjs'
+
+function Navigation() {
+  const pathname = usePathname()  // "/blog/post-1"
+  const searchParams = useSearchParams()  // URLSearchParams
+  const hash = useHash()  // "#section-2"
+
+  return (
+    <nav>
+      <a href="/" className={pathname === '/' ? 'active' : ''}>Home</a>
+      <a href="/blog" className={pathname.startsWith('/blog') ? 'active' : ''}>Blog</a>
+    </nav>
+  )
+}
+```
+
+**From `hooks.js:336`:**
+
+```javascript
+const useHash = () => {
+  const [hash, setHash] = useStore(window.location.hash)
+  useEffect(() => {
+    const onHashChange = () => setHash(window.location.hash)
+    window.addEventListener('hashchange', onHashChange)
+    return () => window.removeEventListener('hashchange', onHashChange)
+  }, [])
+  return hash
+}
+```
+
+## Utility Hooks
+
+### useId()
+
+Generates deterministic, unique IDs stable across SSR and hydration.
+
+```javascript
+import { useId } from '@unsetsoft/ryunixjs'
+
+function FormField({ label }) {
+  const id = useId()
+
+  return (
+    <div>
+      <label htmlFor={id}>{label}</label>
+      <input id={id} />
+    </div>
+  )
+}
+```
+
+### useDebounce()
+
+Returns a debounced value that updates after a delay.
+
+```javascript
+import { useDebounce, useStore } from '@unsetsoft/ryunixjs'
+
+function Search() {
+  const [query, setQuery] = useStore('')
+  const debouncedQuery = useDebounce(query, 500)
+
+  useEffect(() => {
+    if (debouncedQuery) {
+      fetchResults(debouncedQuery)
+    }
+  }, [debouncedQuery])
+
+  return <input value={query} onChange={e => setQuery(e.target.value)} />
+}
+```
+
+### useThrottle()
+
+Returns a throttled value that updates at most once per interval.
+
+```javascript
+import { useThrottle, useStore } from '@unsetsoft/ryunixjs'
+
+function MouseTracker() {
+  const [position, setPosition] = useStore({ x: 0, y: 0 })
+  const throttledPosition = useThrottle(position, 100)
+
+  useEffect(() => {
+    const handleMove = (e) => setPosition({ x: e.clientX, y: e.clientY })
+    window.addEventListener('mousemove', handleMove)
+    return () => window.removeEventListener('mousemove', handleMove)
+  }, [])
+
+  return <div>Mouse: {throttledPosition.x}, {throttledPosition.y}</div>
+}
+```
+
+### useSwitch()
+
+Simplified boolean state with toggle function.
+
+```javascript
+import { useSwitch } from '@unsetsoft/ryunixjs'
+
+function Accordion() {
+  const [isOpen, toggle] = useSwitch(false)
+
+  return (
+    <div>
+      <button onClick={toggle}>{isOpen ? 'Close' : 'Open'}</button>
+      {isOpen && <div>Content...</div>}
+    </div>
+  )
+}
+```
+
+## Best Practices
+
+<Card title="Dependencies Matter" icon="link">
+  Always include all values from component scope that change over time in your dependency arrays. Missing dependencies cause stale closures.
+</Card>
+
+<Card title="Functional Updates" icon="arrow-up">
+  Use functional updates `setState(prev => prev + 1)` when new state depends on previous state to avoid stale state issues.
+</Card>
+
+<Card title="Memoization" icon="bolt">
+  Only memoize expensive computations. Premature optimization adds complexity without benefit.
+</Card>
+
+## Next Steps
+
+<Card title="State & Priority" icon="clock" href="/core/state-priority">
+  Deep dive into priority scheduling and concurrent rendering
+</Card>
+
+<Card title="Components" icon="cube" href="/core/components">
+  Explore built-in components like ErrorBoundary and Suspense
+</Card>

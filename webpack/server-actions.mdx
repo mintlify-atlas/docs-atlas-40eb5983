@@ -1,0 +1,644 @@
+---
+title: 'Server Actions'
+description: 'Execute server-side functions from client components seamlessly'
+---
+
+# Server Actions
+
+Server Actions are asynchronous functions that execute on the Node.js server but can be called directly from client components. They provide a seamless bridge between frontend and backend without manual API endpoint creation.
+
+## How It Works
+
+The `ryunix-server-action-loader.mjs` uses Babel AST transformations to automatically generate client proxies and server registrations.
+
+**Location**: `webpack/loaders/ryunix-server-action-loader.mjs:4`
+
+### The `// @server` Directive
+
+Mark a file as containing server actions by adding `// @server` at the top:
+
+```javascript actions/users.js
+// @server
+
+export async function createUser(name, email) {
+  // This runs on the server
+  const user = await db.users.create({ name, email })
+  return { id: user.id, name: user.name }
+}
+
+export async function deleteUser(id) {
+  await db.users.delete(id)
+  return { success: true }
+}
+```
+
+## Loader Transformation
+
+The loader processes files differently for client and server builds:
+
+### Client Build (`target: 'web'`)
+
+<Steps>
+  <Step title="Parse AST">
+    Use Babel to find all exported async functions
+
+    ```javascript
+    ExportNamedDeclaration(path) {
+      const declaration = path.node.declaration
+      if (t.isFunctionDeclaration(declaration) && declaration.async) {
+        const name = declaration.id.name
+        actionNames.push(name)
+      }
+    }
+    ```
+  </Step>
+
+  <Step title="Generate Action ID">
+    Create a unique hash combining file path and function name
+
+    ```javascript
+    const hash = createHash('sha256')
+      .update(this.resourcePath)
+      .digest('hex')
+      .slice(0, 8)
+    
+    const actionId = `${hash}_${name}`  // e.g., "a3f2e8b1_createUser"
+    ```
+  </Step>
+
+  <Step title="Replace with Proxy">
+    Transform the export into a proxy call
+
+    ```javascript
+    // Original
+    export async function createUser(name, email) { ... }
+
+    // Transformed
+    export const createUser = __ryunixCreateActionProxy("a3f2e8b1_createUser")
+    ```
+  </Step>
+
+  <Step title="Inject Import">
+    Add import for the proxy creator
+
+    ```javascript
+    import { createActionProxy as __ryunixCreateActionProxy } from '@unsetsoft/ryunixjs'
+    ```
+  </Step>
+</Steps>
+
+**Location**: `webpack/loaders/ryunix-server-action-loader.mjs:23`
+
+### Server Build (`target: 'node'`)
+
+<Steps>
+  <Step title="Parse AST">
+    Find the same exported async functions
+  </Step>
+
+  <Step title="Keep Original Implementation">
+    Leave function bodies unchanged
+  </Step>
+
+  <Step title="Register Actions">
+    Append registration code to the module
+
+    ```javascript
+    // Ryunix Server Actions Registration
+    if (typeof globalThis.__RYUNIX_SERVER_ACTIONS__ === 'undefined') {
+      globalThis.__RYUNIX_SERVER_ACTIONS__ = {}
+    }
+    globalThis.__RYUNIX_SERVER_ACTIONS__['a3f2e8b1_createUser'] = createUser
+    globalThis.__RYUNIX_SERVER_ACTIONS__['a3f2e8b1_deleteUser'] = deleteUser
+    ```
+  </Step>
+</Steps>
+
+**Location**: `webpack/loaders/ryunix-server-action-loader.mjs:71`
+
+## Client Proxy Implementation
+
+When a client calls a server action, the proxy performs a POST request:
+
+```javascript
+// In @unsetsoft/ryunixjs
+export function createActionProxy(actionId) {
+  return async (...args) => {
+    const response = await fetch('/_ryunix/action', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ actionId, args })
+    })
+    
+    if (!response.ok) {
+      throw new Error(`Server action failed: ${response.statusText}`)
+    }
+    
+    return await response.json()
+  }
+}
+```
+
+## Server Action Endpoint
+
+The development and production servers handle `/_ryunix/action` requests:
+
+### Development Server
+
+```javascript
+devServer.app.use(async (req, res, next) => {
+  if (req.method === 'POST' && req.url === '/_ryunix/action') {
+    let body = ''
+    req.on('data', chunk => { body += chunk })
+    req.on('end', async () => {
+      const { actionId, args } = JSON.parse(body)
+      
+      const action = global.__RYUNIX_SERVER_ACTIONS__?.[actionId]
+      if (!action) {
+        res.writeHead(404, { 'Content-Type': 'application/json' })
+        return res.end(JSON.stringify({ 
+          error: `Server Action ${actionId} not found` 
+        }))
+      }
+      
+      const result = await action(...args)
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify(result))
+    })
+    return
+  }
+  next()
+})
+```
+
+**Location**: `webpack/webpack.config.mjs:401`
+
+## Usage Examples
+
+### Form Submission
+
+<CodeGroup>
+```javascript actions/auth.js
+// @server
+import bcrypt from 'bcrypt'
+import jwt from 'jsonwebtoken'
+
+export async function login(email, password) {
+  const user = await db.users.findOne({ email })
+  
+  if (!user || !await bcrypt.compare(password, user.passwordHash)) {
+    throw new Error('Invalid credentials')
+  }
+  
+  const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET)
+  return { token, user: { id: user.id, email: user.email } }
+}
+```
+
+```javascript components/LoginForm.ryx
+// @client
+import { login } from '../actions/auth'
+
+export default function LoginForm() {
+  const [email, setEmail] = useStore('')
+  const [password, setPassword] = useStore('')
+  const [error, setError] = useStore(null)
+  
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    setError(null)
+    
+    try {
+      const result = await login(email, password)
+      localStorage.setItem('token', result.token)
+      window.location.href = '/dashboard'
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+  
+  return (
+    <form onSubmit={handleSubmit}>
+      <input 
+        type="email" 
+        value={email} 
+        onChange={(e) => setEmail(e.target.value)} 
+      />
+      <input 
+        type="password" 
+        value={password} 
+        onChange={(e) => setPassword(e.target.value)} 
+      />
+      {error && <p style={{ color: 'red' }}>{error}</p>}
+      <button type="submit">Login</button>
+    </form>
+  )
+}
+```
+</CodeGroup>
+
+### Data Mutation
+
+<CodeGroup>
+```javascript actions/posts.js
+// @server
+
+export async function createPost(title, content, authorId) {
+  const post = await db.posts.create({
+    title,
+    content,
+    authorId,
+    publishedAt: new Date()
+  })
+  
+  // Trigger side effects
+  await sendNotification(authorId, 'Post published')
+  await invalidateCache(`user:${authorId}:posts`)
+  
+  return post
+}
+
+export async function updatePost(id, updates) {
+  const post = await db.posts.update(id, updates)
+  await invalidateCache(`post:${id}`)
+  return post
+}
+
+export async function deletePost(id) {
+  await db.posts.delete(id)
+  await invalidateCache(`post:${id}`)
+  return { success: true }
+}
+```
+
+```javascript components/PostEditor.ryx
+// @client
+import { createPost, updatePost } from '../actions/posts'
+
+export default function PostEditor({ existingPost = null, userId }) {
+  const [title, setTitle] = useStore(existingPost?.title || '')
+  const [content, setContent] = useStore(existingPost?.content || '')
+  const [saving, setSaving] = useStore(false)
+  
+  const handleSave = async () => {
+    setSaving(true)
+    
+    try {
+      if (existingPost) {
+        await updatePost(existingPost.id, { title, content })
+      } else {
+        await createPost(title, content, userId)
+      }
+      
+      alert('Post saved successfully!')
+    } catch (err) {
+      alert(`Error: ${err.message}`)
+    } finally {
+      setSaving(false)
+    }
+  }
+  
+  return (
+    <div>
+      <input 
+        value={title} 
+        onChange={(e) => setTitle(e.target.value)}
+        placeholder="Post title"
+      />
+      <textarea 
+        value={content} 
+        onChange={(e) => setContent(e.target.value)}
+        placeholder="Post content"
+      />
+      <button onClick={handleSave} disabled={saving}>
+        {saving ? 'Saving...' : 'Save Post'}
+      </button>
+    </div>
+  )
+}
+```
+</CodeGroup>
+
+### File Upload
+
+<CodeGroup>
+```javascript actions/upload.js
+// @server
+import { writeFile } from 'fs/promises'
+import path from 'path'
+
+export async function uploadAvatar(userId, base64Image) {
+  // Decode base64
+  const buffer = Buffer.from(base64Image.split(',')[1], 'base64')
+  
+  // Generate filename
+  const filename = `avatar-${userId}-${Date.now()}.png`
+  const filepath = path.join(process.cwd(), 'public/avatars', filename)
+  
+  // Save file
+  await writeFile(filepath, buffer)
+  
+  // Update database
+  const user = await db.users.update(userId, {
+    avatar: `/avatars/${filename}`
+  })
+  
+  return { url: user.avatar }
+}
+```
+
+```javascript components/AvatarUpload.ryx
+// @client
+import { uploadAvatar } from '../actions/upload'
+
+export default function AvatarUpload({ userId }) {
+  const [uploading, setUploading] = useStore(false)
+  const [avatarUrl, setAvatarUrl] = useStore(null)
+  
+  const handleFileChange = async (e) => {
+    const file = e.target.files[0]
+    if (!file) return
+    
+    setUploading(true)
+    
+    // Convert to base64
+    const reader = new FileReader()
+    reader.onload = async (event) => {
+      try {
+        const result = await uploadAvatar(userId, event.target.result)
+        setAvatarUrl(result.url)
+        alert('Avatar uploaded successfully!')
+      } catch (err) {
+        alert(`Upload failed: ${err.message}`)
+      } finally {
+        setUploading(false)
+      }
+    }
+    reader.readAsDataURL(file)
+  }
+  
+  return (
+    <div>
+      {avatarUrl && <img src={avatarUrl} alt="Avatar" width={100} />}
+      <input 
+        type="file" 
+        accept="image/*" 
+        onChange={handleFileChange}
+        disabled={uploading}
+      />
+      {uploading && <p>Uploading...</p>}
+    </div>
+  )
+}
+```
+</CodeGroup>
+
+## Arrow Function Support
+
+The loader also handles arrow functions and function expressions:
+
+```javascript
+// @server
+
+// Arrow function
+export const getUserProfile = async (userId) => {
+  const user = await db.users.findById(userId)
+  return { name: user.name, bio: user.bio }
+}
+
+// Function expression
+export const updateSettings = async function(userId, settings) {
+  await db.users.update(userId, { settings })
+  return { success: true }
+}
+```
+
+**Detection logic**:
+
+```javascript
+if (t.isVariableDeclaration(declaration)) {
+  declaration.declarations.forEach(decl => {
+    if ((t.isArrowFunctionExpression(decl.init) || 
+         t.isFunctionExpression(decl.init)) && 
+        decl.init.async) {
+      const name = decl.id.name
+      actionNames.push(name)
+      
+      if (!isServer) {
+        const actionId = `${hash}_${name}`
+        decl.init = t.callExpression(
+          t.identifier('__ryunixCreateActionProxy'),
+          [t.stringLiteral(actionId)]
+        )
+      }
+    }
+  })
+}
+```
+
+**Location**: `webpack/loaders/ryunix-server-action-loader.mjs:44`
+
+## Error Handling
+
+Server actions can throw errors that propagate to the client:
+
+```javascript
+// @server
+export async function purchaseItem(itemId, userId) {
+  const item = await db.items.findById(itemId)
+  const user = await db.users.findById(userId)
+  
+  if (!item) {
+    throw new Error('Item not found')
+  }
+  
+  if (user.balance < item.price) {
+    throw new Error('Insufficient balance')
+  }
+  
+  await db.transactions.create({
+    userId,
+    itemId,
+    amount: item.price
+  })
+  
+  return { success: true, newBalance: user.balance - item.price }
+}
+```
+
+Client receives the error:
+
+```javascript
+try {
+  await purchaseItem(itemId, userId)
+} catch (err) {
+  console.error(err.message)  // "Insufficient balance"
+}
+```
+
+## Security Considerations
+
+<Warning>
+  Server actions have access to your database and server environment. Always validate inputs and check permissions.
+</Warning>
+
+### Input Validation
+
+```javascript
+// @server
+import { z } from 'zod'
+
+const createUserSchema = z.object({
+  email: z.string().email(),
+  name: z.string().min(2).max(50),
+  age: z.number().int().min(13)
+})
+
+export async function createUser(data) {
+  // Validate inputs
+  const validated = createUserSchema.parse(data)
+  
+  const user = await db.users.create(validated)
+  return { id: user.id, email: user.email }
+}
+```
+
+### Permission Checks
+
+```javascript
+// @server
+import { verifyToken } from './auth'
+
+export async function deletePost(postId, authToken) {
+  // Verify authentication
+  const { userId } = await verifyToken(authToken)
+  
+  // Check ownership
+  const post = await db.posts.findById(postId)
+  if (post.authorId !== userId) {
+    throw new Error('Unauthorized')
+  }
+  
+  await db.posts.delete(postId)
+  return { success: true }
+}
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Keep Actions Focused">
+    Each action should do one thing well:
+
+    ```javascript
+    // Good - Single responsibility
+    export async function createUser(data) { ... }
+    export async function updateUser(id, data) { ... }
+    export async function deleteUser(id) { ... }
+
+    // Bad - Mixed responsibilities
+    export async function manageUser(action, id, data) { ... }
+    ```
+  </Accordion>
+
+  <Accordion title="Return Minimal Data">
+    Only return what the client needs:
+
+    ```javascript
+    // Good - Only public fields
+    export async function getUser(id) {
+      const user = await db.users.findById(id)
+      return { 
+        id: user.id, 
+        name: user.name, 
+        avatar: user.avatar 
+      }
+    }
+
+    // Bad - Leaking sensitive data
+    export async function getUser(id) {
+      const user = await db.users.findById(id)
+      return user  // Includes passwordHash, email, etc.
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Handle Errors Gracefully">
+    Provide meaningful error messages:
+
+    ```javascript
+    export async function updateProfile(userId, data) {
+      try {
+        const user = await db.users.update(userId, data)
+        return { success: true, user }
+      } catch (err) {
+        if (err.code === 'P2002') {
+          throw new Error('Email already in use')
+        }
+        throw new Error('Failed to update profile')
+      }
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Use Transactions for Multiple Operations">
+    Ensure data consistency:
+
+    ```javascript
+    export async function transferFunds(fromId, toId, amount) {
+      return await db.$transaction(async (tx) => {
+        await tx.users.update(fromId, {
+          balance: { decrement: amount }
+        })
+        
+        await tx.users.update(toId, {
+          balance: { increment: amount }
+        })
+        
+        await tx.transactions.create({
+          fromId, toId, amount, type: 'transfer'
+        })
+        
+        return { success: true }
+      })
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Debugging
+
+Enable debug mode to see action registration:
+
+```javascript ryunix.config.js
+export default {
+  debug: true
+}
+```
+
+This logs when actions are registered:
+
+```
+[Ryunix Server Actions] Registered: a3f2e8b1_createUser
+[Ryunix Server Actions] Registered: a3f2e8b1_deleteUser
+```
+
+## Limitations
+
+<Warning>
+  - Server actions must be `async` functions
+  - Arguments and return values must be JSON-serializable
+  - Cannot return functions, classes, or DOM elements
+  - File must start with `// @server` directive
+</Warning>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Loaders" icon="code" href="/webpack/loaders">
+    Deep dive into RSC and Server Actions loaders
+  </Card>
+  <Card title="Routing" icon="route" href="/webpack/routing-ssr-ssg">
+    Combine with Server Components for powerful SSR
+  </Card>
+</CardGroup>

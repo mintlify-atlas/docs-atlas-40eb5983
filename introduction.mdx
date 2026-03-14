@@ -1,0 +1,135 @@
+---
+title: Introduction to RyunixJS
+description: A powerful, standalone, high-performance JavaScript framework for building modern web applications
+---
+
+# Introduction to RyunixJS
+
+RyunixJS is a modern UI framework designed to be **completely standalone**. While it draws inspiration from popular libraries like React and Preact, it doesn't include them internally. It provides a familiar API (Hooks, Components) but follows its own path to allow for a more manageable and moldable development experience.
+
+<Note>
+  RyunixJS is built from the ground up with **zero dependencies**, providing a lightweight yet powerful foundation for your applications.
+</Note>
+
+## What Makes RyunixJS Different?
+
+Whether you're building a simple static site or a complex Single Page Application (SPA) with Server-Side Rendering (SSR), RyunixJS gives you the tools to do it efficiently with a framework that's truly independent.
+
+<CardGroup cols={2}>
+  <Card title="Zero Dependencies" icon="cube">
+    The core library is lightweight and completely independent, with no external dependencies required.
+  </Card>
+  <Card title="Familiar API" icon="code">
+    Use hooks like `useStore`, `useEffect`, `useContext`, and more with a React-like API you already know.
+  </Card>
+  <Card title="Hybrid Rendering" icon="server">
+    Built-in support for Server-Side Rendering (SSR) and Static Site Generation (SSG) out of the box.
+  </Card>
+  <Card title="Server Components" icon="bolt">
+    Supports Server Components and Server Actions for modern full-stack workflows.
+  </Card>
+</CardGroup>
+
+## Key Features
+
+### Native MDX Support
+
+Write documentation or content-rich pages directly in MDX with seamless integration. RyunixJS includes `<MDXContent />` and `<MDXProvider />` components that automatically handle MDX compilation and component aliasing.
+
+### Specialized Hooks
+
+RyunixJS includes powerful built-in hooks beyond the standard set:
+
+- **`usePersistentStore`** - Automatically sync state with `localStorage`
+- **`useSwitch`** - Optimized toggle state management
+- **`useDebounce`** - Debounce value updates with configurable delay
+- **`useThrottle`** - Throttle value updates to prevent excessive renders
+- **`useTransition`** - Mark updates as non-urgent for better UX
+- **`useDeferredValue`** - Defer value updates for performance optimization
+
+### Integrated Tooling
+
+Powerful presets and a dedicated CLI (`@unsetsoft/cra`) get you started in seconds, along with a browser extension for debugging.
+
+## Architecture Overview
+
+RyunixJS is built on a solid foundation of core concepts:
+
+### Fiber-Based Reconciliation
+
+At its heart, RyunixJS uses a **Fiber architecture** for efficient DOM reconciliation. The reconciler compares Virtual DOM trees and updates only what's necessary, minimizing expensive DOM operations.
+
+```javascript
+import { render, createElement } from '@unsetsoft/ryunixjs'
+
+function App() {
+  return createElement('div', null,
+    createElement('h1', null, 'Hello, RyunixJS!')
+  )
+}
+
+render(createElement(App), document.getElementById('root'))
+```
+
+### Priority-Based Scheduling
+
+RyunixJS features a sophisticated priority scheduler that allows you to mark certain updates as less urgent, keeping your application responsive during heavy renders.
+
+<Steps>
+  <Step title="Immediate Priority">
+    Critical updates like user input are processed immediately
+  </Step>
+  <Step title="Normal Priority">
+    Standard state updates happen at normal priority
+  </Step>
+  <Step title="Low Priority">
+    Non-urgent updates (transitions) run at low priority without blocking the UI
+  </Step>
+</Steps>
+
+### Server-Side Rendering
+
+RyunixJS provides robust SSR capabilities with both `renderToString` and `renderToReadableStream` for flexible server rendering strategies.
+
+## Package Ecosystem
+
+RyunixJS is managed as a monorepo containing several specialized packages:
+
+| Package | Description |
+| :--- | :--- |
+| **[@unsetsoft/ryunixjs](https://www.npmjs.com/package/@unsetsoft/ryunixjs)** | The core library containing the reconciler, hooks, and DOM utilities |
+| **[@unsetsoft/ryunix-presets](https://www.npmjs.com/package/@unsetsoft/ryunix-presets)** | Unified tooling and Webpack configurations for different environments |
+| **[@unsetsoft/cra](https://www.npmjs.com/package/@unsetsoft/cra)** | The official CLI to scaffold new Ryunix projects effortlessly |
+| **[@unsetsoft/ryunix-devtools](https://www.npmjs.com/package/@unsetsoft/ryunix-devtools)** | Browser extension for debugging and inspecting component trees |
+
+## Built-In Components
+
+RyunixJS ships with several native components that integrate directly into the reconciler:
+
+<CardGroup cols={2}>
+  <Card title="ErrorBoundary" icon="shield-halved">
+    Catch JavaScript errors anywhere in the component tree and display fallback UI
+  </Card>
+  <Card title="ServerBoundary" icon="cloud">
+    Shield server-rendered content during partial hydration for island architecture
+  </Card>
+  <Card title="Suspense" icon="spinner">
+    Display fallback UI while lazy components load, with streaming SSR support
+  </Card>
+  <Card title="Portal" icon="portal">
+    Render children into a different DOM node outside the parent hierarchy
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+Ready to get started? Follow our installation guide to set up RyunixJS in your project, or jump straight into the quickstart to build your first application.
+
+<CardGroup cols={2}>
+  <Card title="Installation" icon="download" href="/installation">
+    Install RyunixJS using npm, yarn, or pnpm
+  </Card>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Build your first RyunixJS app in minutes
+  </Card>
+</CardGroup>

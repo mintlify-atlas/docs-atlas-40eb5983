@@ -1,0 +1,316 @@
+---
+title: '@unsetsoft/ryunix-presets'
+description: 'The tooling backbone for RyunixJS development'
+icon: 'toolbox'
+---
+
+## Overview
+
+`@unsetsoft/ryunix-presets` is the central package managing the build system of RyunixJS. It abstracts the complexity of Webpack, Babel, and specialized loaders, providing a unified and optimized development experience.
+
+<CardGroup cols={2}>
+  <Card title="Unified Webpack Config" icon="webpack">
+    Handles dual compilation for SSR and Browser environments with optimized defaults
+  </Card>
+  <Card title="RSC & Server Actions" icon="server">
+    Native loaders for React-like Server Components and Actions
+  </Card>
+  <Card title="Advanced Loaders" icon="file-code">
+    Pre-configured support for MDX, SASS, PostCSS, and optimized assets
+  </Card>
+  <Card title="SSG Engine" icon="file-export">
+    Integrated plugins for static site generation and prerendering
+  </Card>
+</CardGroup>
+
+## Installation
+
+<CodeGroup>
+```bash npm
+npm install @unsetsoft/ryunix-presets
+```
+
+```bash yarn
+yarn add @unsetsoft/ryunix-presets
+```
+
+```bash pnpm
+pnpm add @unsetsoft/ryunix-presets
+```
+</CodeGroup>
+
+<Note>
+  Current version: **1.0.26-canary.27**
+</Note>
+
+<Warning>
+  This package requires `@unsetsoft/ryunixjs ^1.2.4` as a peer dependency.
+</Warning>
+
+## CLI Usage
+
+The presets package includes the `ryunix` CLI tool for development and production builds:
+
+```bash
+# Start development server
+ryunix dev
+
+# Build for production
+ryunix build
+
+# Start production server
+ryunix start
+```
+
+## Configuration
+
+RyunixJS projects are configured via a `ryunix.config.js` (or `.cjs`) file at the root of your project.
+
+### Basic Configuration
+
+```javascript ryunix.config.js
+module.exports = {
+  ssr: true,
+  mdx: false,
+  rootDir: 'src',
+  buildDir: '.ryunix',
+  port: 3000,
+  favicon: true,
+  debug: false
+};
+```
+
+### Core Options
+
+| Option | Type | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `ssr` | `boolean` | `true` | Enables Server-Side Rendering |
+| `mdx` | `boolean` | `false` | Enables native MDX support |
+| `rootDir` | `string` | `"src"` | The directory containing your source code |
+| `buildDir` | `string` | `".ryunix"` | The output directory for builds |
+| `port` | `number` | `3000` | Development server port |
+| `favicon` | `string\|boolean` | `true` | Path to favicon or boolean to enable default |
+| `debug` | `boolean` | `false` | Enable verbose logging for debugging |
+
+## Server Configuration
+
+### Content Security Policy
+
+Enable Content Security Policy for enhanced security:
+
+```javascript ryunix.config.js
+module.exports = {
+  server: {
+    csp: true
+  }
+};
+```
+
+### CORS Configuration
+
+Configure Cross-Origin Resource Sharing for your development server:
+
+```javascript ryunix.config.js
+module.exports = {
+  server: {
+    cors: {
+      enabled: true,
+      origin: '*',
+      methods: ['GET', 'POST', 'PUT', 'DELETE'],
+      credentials: true
+    }
+  }
+};
+```
+
+## Webpack Customization
+
+Extend the underlying Webpack configuration to add custom loaders, plugins, or resolve options:
+
+```javascript ryunix.config.js
+module.exports = {
+  webpack: {
+    resolve: {
+      alias: {
+        '@components': 'src/components',
+        '@utils': 'src/utils',
+        '@styles': 'src/styles'
+      }
+    },
+    plugins: [
+      // Add custom Webpack plugins
+    ],
+    module: {
+      rules: [
+        // Add custom loaders
+        {
+          test: /\.custom$/,
+          use: 'custom-loader'
+        }
+      ]
+    }
+  }
+};
+```
+
+## ESLint Configuration
+
+Control how ESLint behaves during development:
+
+```javascript ryunix.config.js
+module.exports = {
+  eslint: {
+    files: ['src/**/*.ryx', 'src/**/*.js'],
+    rules: {
+      'no-console': 'warn',
+      'no-unused-vars': 'error'
+    },
+    ignorePatterns: ['dist/', 'node_modules/']
+  }
+};
+```
+
+## Build Pipelines
+
+The presets package manages three main build pipelines:
+
+### 1. Client Pipeline
+
+<Card icon="browser">
+  Compiles assets for the browser with:
+  - Code splitting and tree shaking
+  - Hot Module Replacement (HMR)
+  - Asset optimization (images, fonts, CSS)
+  - Minification and compression
+</Card>
+
+### 2. Server Pipeline
+
+<Card icon="server">
+  Compiles server-side logic for:
+  - Server-Side Rendering (SSR)
+  - Static Site Generation (SSG)
+  - Node.js runtime optimization
+  - Server Components and Actions
+</Card>
+
+### 3. SSG/Prerender
+
+<Card icon="file-code">
+  Generates static HTML during build:
+  - Pre-renders pages at build time
+  - Optimizes for CDN deployment
+  - Supports dynamic route generation
+</Card>
+
+## Supported File Types
+
+The presets package includes loaders for:
+
+<CardGroup cols={3}>
+  <Card title="JavaScript/JSX" icon="js">
+    ES6+, JSX via Babel
+  </Card>
+  <Card title="MDX" icon="markdown">
+    Markdown with JSX components
+  </Card>
+  <Card title="CSS/SASS" icon="css3">
+    CSS, SCSS, PostCSS
+  </Card>
+  <Card title="Images" icon="image">
+    PNG, JPG, SVG, WebP
+  </Card>
+  <Card title="Fonts" icon="font">
+    WOFF, WOFF2, TTF, OTF
+  </Card>
+  <Card title="HTML" icon="html5">
+    HTML templates
+  </Card>
+</CardGroup>
+
+## Included Dependencies
+
+The presets package bundles all necessary build tools:
+
+- **Webpack 5** - Module bundler
+- **Babel** - JavaScript compiler
+- **SWC** - Fast TypeScript/JavaScript compiler
+- **PostCSS** - CSS transformations
+- **Rollup** - Library bundler
+- **ESLint** - Linting and code quality
+- **Terser** - JavaScript minification
+
+## MDX Support
+
+Enable MDX support in your configuration:
+
+```javascript ryunix.config.js
+module.exports = {
+  mdx: true
+};
+```
+
+This enables:
+- `@mdx-js/loader` for processing MDX files
+- Syntax highlighting with `rehype-highlight`
+- GitHub Flavored Markdown with `remark-gfm`
+- Frontmatter support with `remark-frontmatter`
+- Embedded content with `@remark-embedder`
+
+## Environment Variables
+
+The presets package automatically loads environment variables via `dotenv-webpack`:
+
+```bash .env
+API_URL=https://api.example.com
+API_KEY=your-secret-key
+```
+
+<Warning>
+  Only variables prefixed with `PUBLIC_` are available in the browser. All variables are available server-side.
+</Warning>
+
+## Performance Optimization
+
+The presets include several optimization features:
+
+- **Thread Loader** - Multi-threaded compilation for faster builds
+- **CSS Minimizer** - Optimized CSS output
+- **Terser** - Advanced JavaScript minification
+- **Code Splitting** - Automatic chunk optimization
+- **Asset Optimization** - Compressed images and fonts
+
+## Development Server
+
+The development server includes:
+
+- Hot Module Replacement (HMR)
+- Fast refresh for components
+- Automatic browser reload
+- Error overlay
+- CORS and CSP support
+- Custom middleware support
+
+## Engine Requirements
+
+<Warning>
+  Requires Node.js **^20 || ^22 || ^24**
+</Warning>
+
+## Exports
+
+The package exports:
+
+- **`webpack`** - Access to Webpack configuration builder
+- **CLI binary** - `ryunix` command for development and builds
+
+## Resources
+
+<CardGroup cols={2}>
+  <Card title="GitHub Repository" icon="github" href="https://github.com/UnSetSoft/Ryunixjs">
+    View source code and contribute
+  </Card>
+  <Card title="npm Package" icon="npm" href="https://www.npmjs.com/package/@unsetsoft/ryunix-presets">
+    View on npm registry
+  </Card>
+</CardGroup>

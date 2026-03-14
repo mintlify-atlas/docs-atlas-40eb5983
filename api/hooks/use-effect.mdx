@@ -1,0 +1,227 @@
+---
+title: "useEffect & useLayoutEffect"
+description: "Side effects and lifecycle hooks"
+---
+
+## useEffect
+
+Runs side effects after the render phase. Effect callbacks are executed if the dependency array changes.
+
+### Signature
+
+```typescript
+function useEffect(
+  callback: () => void | (() => void),
+  deps?: any[]
+): void
+```
+
+<ParamField path="callback" type="() => void | (() => void)" required>
+  A function containing the side effect logic. Can optionally return a cleanup function that will be called before the next effect runs or when the component unmounts.
+</ParamField>
+
+<ParamField path="deps" type="any[]">
+  Optional array of dependencies. The effect only runs if any dependency has changed since the last render. If omitted, the effect runs after every render. Pass an empty array `[]` to run only once on mount.
+</ParamField>
+
+### Usage
+
+#### Basic Effect
+
+```javascript
+import { useEffect, useStore } from '@ryunixjs/core'
+
+const Timer = () => {
+  const [seconds, setSeconds] = useStore(0)
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setSeconds(prev => prev + 1)
+    }, 1000)
+
+    // Cleanup function
+    return () => clearInterval(interval)
+  }, []) // Empty deps = run once on mount
+
+  return <div>Seconds: {seconds}</div>
+}
+```
+
+#### Data Fetching
+
+```javascript
+const UserProfile = ({ userId }) => {
+  const [user, setUser] = useStore(null)
+  const [loading, setLoading] = useStore(true)
+
+  useEffect(() => {
+    let cancelled = false
+
+    const fetchUser = async () => {
+      setLoading(true)
+      try {
+        const response = await fetch(`/api/users/${userId}`)
+        const data = await response.json()
+        if (!cancelled) {
+          setUser(data)
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false)
+        }
+      }
+    }
+
+    fetchUser()
+
+    return () => {
+      cancelled = true
+    }
+  }, [userId]) // Re-run when userId changes
+
+  if (loading) return <div>Loading...</div>
+  return <div>Hello, {user.name}</div>
+}
+```
+
+#### Event Listeners
+
+```javascript
+const WindowSize = () => {
+  const [size, setSize] = useStore({
+    width: window.innerWidth,
+    height: window.innerHeight
+  })
+
+  useEffect(() => {
+    const handleResize = () => {
+      setSize({
+        width: window.innerWidth,
+        height: window.innerHeight
+      })
+    }
+
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
+
+  return <div>{size.width} x {size.height}</div>
+}
+```
+
+## useLayoutEffect
+
+Runs synchronously after DOM mutations but before the browser paints. Essential for making DOM measurements to avoid visual flickering.
+
+### Signature
+
+```typescript
+function useLayoutEffect(
+  callback: () => void | (() => void),
+  deps?: any[]
+): void
+```
+
+<ParamField path="callback" type="() => void | (() => void)" required>
+  A function containing synchronous DOM operations. Can optionally return a cleanup function.
+</ParamField>
+
+<ParamField path="deps" type="any[]">
+  Optional array of dependencies. Same behavior as `useEffect`.
+</ParamField>
+
+### Usage
+
+#### Measuring DOM Elements
+
+```javascript
+import { useLayoutEffect, useStore, useRef } from '@ryunixjs/core'
+
+const MeasuredBox = () => {
+  const ref = useRef(null)
+  const [dimensions, setDimensions] = useStore({ width: 0, height: 0 })
+
+  useLayoutEffect(() => {
+    if (ref.current) {
+      const { width, height } = ref.current.getBoundingClientRect()
+      setDimensions({ width, height })
+    }
+  }, [])
+
+  return (
+    <div ref={ref}>
+      Width: {dimensions.width}px, Height: {dimensions.height}px
+    </div>
+  )
+}
+```
+
+#### Preventing Visual Flickering
+
+```javascript
+const Tooltip = ({ targetRef }) => {
+  const tooltipRef = useRef(null)
+  const [position, setPosition] = useStore({ top: 0, left: 0 })
+
+  useLayoutEffect(() => {
+    if (targetRef.current && tooltipRef.current) {
+      const targetRect = targetRef.current.getBoundingClientRect()
+      const tooltipRect = tooltipRef.current.getBoundingClientRect()
+
+      // Calculate position before paint to prevent flicker
+      setPosition({
+        top: targetRect.bottom + 5,
+        left: targetRect.left + (targetRect.width - tooltipRect.width) / 2
+      })
+    }
+  })
+
+  return (
+    <div
+      ref={tooltipRef}
+      style={{ position: 'absolute', top: position.top, left: position.left }}
+    >
+      Tooltip content
+    </div>
+  )
+}
+```
+
+## Comparison
+
+| Feature | useEffect | useLayoutEffect |
+|---------|-----------|----------------|
+| Execution timing | After paint | Before paint (synchronous) |
+| Blocks rendering | No | Yes |
+| Use case | Data fetching, subscriptions | DOM measurements, positioning |
+| Performance | Better for most cases | Use sparingly |
+
+## Error Handling
+
+Both hooks validate their arguments in development:
+
+```javascript
+// ❌ Invalid - callback must be a function
+useEffect('not a function', [])
+
+// ❌ Invalid - deps must be an array or undefined
+useEffect(() => {}, 'invalid')
+
+// ✅ Valid
+useEffect(() => {}, [])
+useEffect(() => {}) // No deps
+```
+
+## Behavior
+
+- Both hooks are skipped during server-side rendering
+- Effects only run if dependencies have changed (using `Object.is` comparison)
+- Cleanup functions from previous effects run before new effects
+- Cleanup functions run when the component unmounts
+- Warnings are thrown if hooks are called outside component context
+
+## Related Hooks
+
+- [useRef](/api/hooks/use-ref) - For accessing DOM elements
+- [useStore](/api/hooks/use-store) - For state management within effects
+- [useMemo](/api/hooks/use-memo-callback) - For memoizing computed values

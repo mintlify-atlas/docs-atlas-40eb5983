@@ -1,0 +1,121 @@
+---
+title: Suspense
+description: Show fallback UI while lazy components are loading
+---
+
+## Overview
+
+Suspense is a component that displays a fallback UI while lazy-loaded components are being fetched. It integrates with RyunixJS's lazy loading system to provide a smooth loading experience.
+
+## Import
+
+```javascript
+import { Suspense } from 'ryunixjs'
+```
+
+## Props
+
+<ParamField path="fallback" type="ReactNode">
+  The UI to display while lazy components are loading. If not provided, nothing will be shown during loading.
+</ParamField>
+
+<ParamField path="children" type="ReactNode" required>
+  The content to render, typically containing one or more lazy-loaded components created with `lazy()`.
+</ParamField>
+
+## Usage
+
+### Basic Usage with Lazy Components
+
+```javascript
+import { Suspense, lazy } from 'ryunixjs'
+
+const LazyComponent = lazy(() => import('./MyComponent.js'))
+
+function App() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <LazyComponent />
+    </Suspense>
+  )
+}
+```
+
+### Multiple Lazy Components
+
+Suspense monitors all lazy children and shows the fallback until all are loaded:
+
+```javascript
+import { Suspense, lazy } from 'ryunixjs'
+
+const Header = lazy(() => import('./Header.js'))
+const Sidebar = lazy(() => import('./Sidebar.js'))
+const Content = lazy(() => import('./Content.js'))
+
+function App() {
+  return (
+    <Suspense fallback={<div>Loading application...</div>}>
+      <Header />
+      <Sidebar />
+      <Content />
+    </Suspense>
+  )
+}
+```
+
+### Nested Suspense Boundaries
+
+Create granular loading states with nested boundaries:
+
+```javascript
+function App() {
+  return (
+    <Suspense fallback={<div>Loading app...</div>}>
+      <Header />
+      <Suspense fallback={<div>Loading sidebar...</div>}>
+        <LazySidebar />
+      </Suspense>
+      <Suspense fallback={<div>Loading content...</div>}>
+        <LazyContent />
+      </Suspense>
+    </Suspense>
+  )
+}
+```
+
+### Custom Loading UI
+
+```javascript
+function LoadingSpinner() {
+  return (
+    <div className="spinner">
+      <div className="spinner-circle"></div>
+      <p>Please wait...</p>
+    </div>
+  )
+}
+
+function App() {
+  return (
+    <Suspense fallback={<LoadingSpinner />}>
+      <LazyComponent />
+    </Suspense>
+  )
+}
+```
+
+## Implementation Details
+
+- Suspense tracks the loading state of all child components marked with `_isLazy`
+- Uses `useStore` and `useEffect` hooks internally to re-render when loading completes
+- During server-side rendering with background tasks, Suspense renders children directly to capture them
+- Children are checked for pending status via `_getStatus()` method
+- When all lazy children are loaded, Suspense renders them in a Fragment
+
+## Server-Side Rendering
+
+During SSR with background tasks (`state.isSuspenseBackground`), Suspense renders the actual children instead of the fallback, allowing the server to capture and render lazy components.
+
+## Type Marker
+
+Suspense has the type `RYUNIX_SUSPENSE` for internal reconciler identification.

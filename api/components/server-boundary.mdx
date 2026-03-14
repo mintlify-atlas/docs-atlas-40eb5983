@@ -1,0 +1,202 @@
+---
+title: ServerBoundary
+description: Wrap server-only content for selective hydration
+---
+
+## Overview
+
+ServerBoundary is a special component used to wrap content that is rendered exclusively on the server. During hydration, RyunixJS will skip this node's children, preserving the server-rendered HTML without re-rendering it on the client.
+
+This is useful for static content, SEO elements, or server-only components that don't need client-side interactivity.
+
+## Import
+
+```javascript
+import { ServerBoundary } from 'ryunixjs'
+```
+
+## Props
+
+<ParamField path="children" type="ReactNode" required>
+  The content to render on the server. During client-side hydration, this content will not be re-rendered; the server HTML will be preserved.
+</ParamField>
+
+<ParamField path="id" type="string">
+  Optional identifier for the boundary. Used for debugging and to mark the boundary in the DOM with `data-ryunix-server` attribute.
+</ParamField>
+
+## Usage
+
+### Basic Server-Only Content
+
+```javascript
+import { ServerBoundary } from 'ryunixjs'
+
+function App() {
+  return (
+    <div>
+      <ServerBoundary id="header">
+        <header>
+          <h1>My Website</h1>
+          <nav>
+            <a href="/">Home</a>
+            <a href="/about">About</a>
+          </nav>
+        </header>
+      </ServerBoundary>
+      
+      <main>
+        <InteractiveComponent />
+      </main>
+    </div>
+  )
+}
+```
+
+### SEO Metadata
+
+Wrap metadata that only needs to be rendered on the server:
+
+```javascript
+import { ServerBoundary } from 'ryunixjs'
+
+function BlogPost({ post }) {
+  return (
+    <article>
+      <ServerBoundary id="seo-meta">
+        <meta name="description" content={post.excerpt} />
+        <meta property="og:title" content={post.title} />
+        <meta property="og:image" content={post.image} />
+      </ServerBoundary>
+      
+      <h1>{post.title}</h1>
+      <div>{post.content}</div>
+    </article>
+  )
+}
+```
+
+### Static Navigation
+
+```javascript
+import { ServerBoundary } from 'ryunixjs'
+
+function Layout({ children }) {
+  return (
+    <div>
+      <ServerBoundary id="sidebar">
+        <aside className="sidebar">
+          <h2>Categories</h2>
+          <ul>
+            <li><a href="/tech">Technology</a></li>
+            <li><a href="/design">Design</a></li>
+            <li><a href="/business">Business</a></li>
+          </ul>
+        </aside>
+      </ServerBoundary>
+      
+      <main>{children}</main>
+    </div>
+  )
+}
+```
+
+### Server-Rendered Lists
+
+Use for large static lists that don't need client-side reactivity:
+
+```javascript
+import { ServerBoundary } from 'ryunixjs'
+
+function ProductList({ products }) {
+  return (
+    <div>
+      <h1>Products</h1>
+      <ServerBoundary id="product-grid">
+        <div className="grid">
+          {products.map(product => (
+            <div key={product.id}>
+              <img src={product.image} alt={product.name} />
+              <h3>{product.name}</h3>
+              <p>${product.price}</p>
+            </div>
+          ))}
+        </div>
+      </ServerBoundary>
+    </div>
+  )
+}
+```
+
+### Combining with Client Components
+
+```javascript
+import { ServerBoundary } from 'ryunixjs'
+
+function HomePage({ posts }) {
+  return (
+    <div>
+      <ServerBoundary id="hero">
+        <section className="hero">
+          <h1>Welcome to My Blog</h1>
+          <p>Latest thoughts on web development</p>
+        </section>
+      </ServerBoundary>
+      
+      {/* This part is interactive and will hydrate */}
+      <InteractiveBlogList posts={posts} />
+    </div>
+  )
+}
+```
+
+## Implementation Details
+
+- Renders a `<div>` with `display: contents` to avoid affecting layout
+- Adds `data-ryunix-server` attribute with the provided `id` for identification
+- During hydration, the reconciler skips children of ServerBoundary nodes
+- Server-rendered HTML is preserved exactly as-is on the client
+- No event handlers or state will work inside ServerBoundary children on the client
+
+## Performance Benefits
+
+### Reduced Hydration Time
+
+```javascript
+// Before: All content hydrates
+function App({ staticData }) {
+  return (
+    <div>
+      <header>{/* 1000s of links */}</header>
+      <main>{/* Interactive content */}</main>
+    </div>
+  )
+}
+
+// After: Only interactive content hydrates
+function App({ staticData }) {
+  return (
+    <div>
+      <ServerBoundary id="nav">
+        <header>{/* 1000s of links - skipped during hydration */}</header>
+      </ServerBoundary>
+      <main>{/* Interactive content - hydrates normally */}</main>
+    </div>
+  )
+}
+```
+
+### Smaller Client Bundles
+
+Server-only components wrapped in ServerBoundary can be excluded from client bundles in some build configurations.
+
+## Type Marker
+
+ServerBoundary has a special type marker `RYUNIX_SERVER_BOUNDARY` that the reconciler uses to identify it during hydration.
+
+## Caveats
+
+- Content inside ServerBoundary will not respond to events on the client
+- State changes will not affect ServerBoundary children
+- Links and forms will work (native browser behavior) but custom event handlers will not
+- Use only for truly static content that doesn't need interactivity

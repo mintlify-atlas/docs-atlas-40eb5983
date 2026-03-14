@@ -1,0 +1,523 @@
+---
+title: 'Virtual DOM & Reconciliation'
+description: 'Understanding RyunixJS fiber-based reconciliation engine and efficient diffing algorithms'
+---
+
+# Virtual DOM & Reconciliation
+
+RyunixJS employs a **Fiber-based, concurrent rendering architecture** that splits rendering work into interruptible units, preventing main thread blocking during deep tree updates.
+
+## Reconciliation Overview
+
+Reconciliation is the process of comparing the current virtual tree with new elements to determine what needs to be created, updated, or deleted.
+
+<Info>
+The reconciler (`reconciler.js`) builds an O(1) Map of old fibers keyed by their explicit `key` prop or positional index for efficient diffing.
+</Info>
+
+## Effect Tags
+
+Each fiber is marked with an **effect tag** during reconciliation:
+
+- **`PLACEMENT`**: New elements to add to the DOM
+- **`UPDATE`**: Existing elements with changed props
+- **`DELETION`**: Old elements removed from the tree
+- **`HYDRATE`**: Existing SSR nodes needing event listeners and logical attachment
+
+## reconcileChildren()
+
+The core reconciliation function compares old and new children.
+
+**From `reconciler.js:6`:**
+
+```javascript
+const reconcileChildren = (wipFiber, elements) => {
+  const state = getState()
+  let index = 0
+  let prevSibling
+  let isFirstChild = true
+
+  // Build map of old fibers by key/index
+  const oldFiberMap = new Map()
+  let oldFiber = wipFiber.alternate?.child
+  let position = 0
+
+  while (oldFiber) {
+    const key = oldFiber.key ?? `__index_${oldFiber.index ?? position}__`
+    oldFiberMap.set(key, oldFiber)
+    oldFiber = oldFiber.sibling
+    position++
+  }
+
+  // Process new elements
+  while (index < elements.length) {
+    const element = elements[index]
+    if (!element) {
+      index++
+      continue
+    }
+
+    const key = element.key ?? `__index_${index}__`
+    const matchedFiber = oldFiberMap.get(key)
+
+    let newFiber
+    const sameType = matchedFiber && element.type === matchedFiber.type
+
+    if (sameType) {
+      // Update existing fiber
+      newFiber = {
+        type: matchedFiber.type,
+        props: element.props,
+        dom: matchedFiber.dom,
+        parent: wipFiber,
+        alternate: matchedFiber,
+        effectTag: EFFECT_TAGS.UPDATE,
+        hooks: matchedFiber.hooks,
+        key: element.key,
+        index,
+      }
+      oldFiberMap.delete(key)
+    } else {
+      // Create new fiber
+      newFiber = {
+        type: element.type,
+        props: element.props,
+        dom: null,
+        parent: wipFiber,
+        alternate: null,
+        effectTag: state.isHydrating ? EFFECT_TAGS.HYDRATE : EFFECT_TAGS.PLACEMENT,
+        key: element.key,
+        index,
+      }
+
+      // Mark matched fiber for deletion if exists
+      if (matchedFiber) {
+        matchedFiber.effectTag = EFFECT_TAGS.DELETION
+        state.deletions.push(matchedFiber)
+        oldFiberMap.delete(key)
+      }
+    }
+
+    // Link fibers
+    if (isFirstChild) {
+      wipFiber.child = newFiber
+      isFirstChild = false
+    } else if (newFiber) {
+      prevSibling.sibling = newFiber
+    }
+
+    prevSibling = newFiber
+    index++
+  }
+
+  // Delete remaining old fibers
+  oldFiberMap.forEach((fiber) => {
+    fiber.effectTag = EFFECT_TAGS.DELETION
+    state.deletions.push(fiber)
+  })
+}
+```
+
+<Accordion title="Why use a Map for reconciliation?">
+The Map-based approach provides:
+
+- **O(1) lookups**: Finding matching fibers by key is constant time
+- **Key optimization**: Explicit `key` props enable efficient reordering
+- **Positional fallback**: Auto-generated index keys when no explicit key
+- **Deletion tracking**: Remaining map entries are cleanly marked for deletion
+
+This is significantly faster than the O(n²) naive approach of nested loops.
+</Accordion>
+
+## Key-Based Reconciliation
+
+Proper key usage is critical for efficient list rendering.
+
+**Bad (index as key):**
+
+```javascript
+function TodoList({ todos }) {
+  return (
+    <ul>
+      {todos.map((todo, index) => (
+        <li key={index}>{todo.text}</li>
+      ))}
+    </ul>
+  )
+}
+```
+
+**Good (stable ID as key):**
+
+```javascript
+function TodoList({ todos }) {
+  return (
+    <ul>
+      {todos.map(todo => (
+        <li key={todo.id}>{todo.text}</li>
+      ))}
+    </ul>
+  )
+}
+```
+
+<Warning>
+Using array index as key causes RyunixJS to incorrectly reuse DOM nodes when list order changes, leading to bugs with stateful components or form inputs.
+</Warning>
+
+### How Keys Work
+
+From `reconciler.js:18`:
+
+```javascript
+while (oldFiber) {
+  const key = oldFiber.key ?? `__index_${oldFiber.index ?? position}__`
+  oldFiberMap.set(key, oldFiber)
+  oldFiber = oldFiber.sibling
+  position++
+}
+```
+
+Keys determine fiber identity:
+
+1. **Explicit key**: `<li key="todo-123">` → uses "todo-123"
+2. **No key**: `<li>` → auto-generates `__index_0__`, `__index_1__`, etc.
+3. **Match by key + type**: Only reuse if both key and element type match
+
+## Fiber Structure
+
+Each fiber represents a unit of work:
+
+```javascript
+{
+  type: 'div' | FunctionComponent,  // Element type
+  props: { children: [...], ... },   // Props including children
+  dom: HTMLElement | null,           // Actual DOM reference
+  parent: parentFiber,               // Parent fiber
+  child: firstChildFiber,            // First child
+  sibling: nextSiblingFiber,         // Next sibling
+  alternate: previousFiber,          // Previous render's fiber
+  effectTag: 'PLACEMENT',            // What to do in commit
+  hooks: [],                         // Hook state array
+  key: 'unique-key',                 // Reconciliation key
+  index: 0                           // Position in children
+}
+```
+
+<Info>
+The `alternate` pointer enables efficient diffing by referencing the corresponding fiber from the previous render.
+</Info>
+
+## Update Types
+
+### PLACEMENT (New Element)
+
+When a new element is added:
+
+```javascript
+if (!matchedFiber || element.type !== matchedFiber.type) {
+  newFiber = {
+    type: element.type,
+    props: element.props,
+    dom: null,  // Will be created in commit phase
+    parent: wipFiber,
+    alternate: null,
+    effectTag: EFFECT_TAGS.PLACEMENT,
+    key: element.key,
+    index,
+  }
+}
+```
+
+During commit (`commits.js:175`):
+
+```javascript
+if (fiber.effectTag === EFFECT_TAGS.PLACEMENT) {
+  if (fiber.dom != null) {
+    domParent.appendChild(fiber.dom)
+  }
+  runLayoutEffects(fiber)
+  runNormalEffects(fiber)
+}
+```
+
+### UPDATE (Changed Props)
+
+When element type matches but props changed:
+
+```javascript
+if (sameType) {
+  newFiber = {
+    type: matchedFiber.type,
+    props: element.props,  // New props
+    dom: matchedFiber.dom, // Reuse existing DOM
+    parent: wipFiber,
+    alternate: matchedFiber,
+    effectTag: EFFECT_TAGS.UPDATE,
+    hooks: matchedFiber.hooks,  // Preserve hook state
+    key: element.key,
+    index,
+  }
+  oldFiberMap.delete(key)
+}
+```
+
+During commit (`commits.js:186`):
+
+```javascript
+else if (fiber.effectTag === EFFECT_TAGS.UPDATE) {
+  cancelEffects(fiber)
+  if (fiber.dom != null) {
+    updateDom(fiber.dom, fiber.alternate.props, fiber.props)
+  }
+  runLayoutEffects(fiber)
+  runNormalEffects(fiber)
+}
+```
+
+### DELETION (Removed Element)
+
+When old fiber has no matching new element:
+
+```javascript
+// Delete remaining old fibers
+oldFiberMap.forEach((fiber) => {
+  fiber.effectTag = EFFECT_TAGS.DELETION
+  state.deletions.push(fiber)
+})
+```
+
+During commit (`commits.js:216`):
+
+```javascript
+else if (fiber.effectTag === EFFECT_TAGS.DELETION) {
+  cancelEffectsDeep(fiber)  // Cleanup before removal
+  commitDeletion(fiber, domParent)
+  return
+}
+```
+
+<Note>
+Cleanup functions from `useEffect` are called BEFORE DOM removal to allow reading DOM state during cleanup.
+</Note>
+
+### HYDRATE (SSR Node)
+
+When hydrating server-rendered content:
+
+```javascript
+if (state.isHydrating && state.hydrateCursor) {
+  const domNode = state.hydrateCursor
+  const isText = fiber.type === RYUNIX_TYPES.TEXT_ELEMENT && domNode.nodeType === 3
+  const isElement = typeof fiber.type === 'string' && 
+    domNode.nodeType === 1 && 
+    domNode.tagName.toLowerCase() === fiber.type.toLowerCase()
+
+  if (isText || isElement) {
+    fiber.dom = domNode
+    fiber.effectTag = EFFECT_TAGS.HYDRATE
+    state.hydrateCursor = nextValidSibling(domNode.firstChild)
+  }
+}
+```
+
+During commit (`commits.js:193`):
+
+```javascript
+else if (fiber.effectTag === EFFECT_TAGS.HYDRATE) {
+  if (!state.hydrationFailed) {
+    // Only attach event listeners, do not append to DOM
+    if (fiber.dom != null) {
+      updateDom(fiber.dom, {}, fiber.props)
+    }
+    runLayoutEffects(fiber)
+    runNormalEffects(fiber)
+  }
+}
+```
+
+## DOM Update Diffing
+
+The `updateDom` function applies minimal DOM mutations:
+
+```javascript
+const updateDom = (dom, prevProps, nextProps) => {
+  // Remove old event listeners
+  Object.keys(prevProps)
+    .filter(isEvent)
+    .filter(key => !(key in nextProps) || isNew(prevProps, nextProps)(key))
+    .forEach(name => {
+      const eventType = name.toLowerCase().substring(2)
+      dom.removeEventListener(eventType, prevProps[name])
+    })
+
+  // Remove old properties
+  Object.keys(prevProps)
+    .filter(isProperty)
+    .filter(isGone(prevProps, nextProps))
+    .forEach(name => {
+      dom[name] = ''
+    })
+
+  // Set new or changed properties
+  Object.keys(nextProps)
+    .filter(isProperty)
+    .filter(isNew(prevProps, nextProps))
+    .forEach(name => {
+      dom[name] = nextProps[name]
+    })
+
+  // Add new event listeners
+  Object.keys(nextProps)
+    .filter(isEvent)
+    .filter(isNew(prevProps, nextProps))
+    .forEach(name => {
+      const eventType = name.toLowerCase().substring(2)
+      dom.addEventListener(eventType, nextProps[name])
+    })
+}
+```
+
+## Work Loop Integration
+
+Reconciliation happens during the work loop (`workers.js:91`):
+
+```javascript
+function performUnitOfWork(fiber) {
+  const isFunctionComponent =
+    fiber.type instanceof Function || typeof fiber.type === 'function'
+
+  if (isFunctionComponent) {
+    updateFunctionComponent(fiber)  // Calls reconcileChildren
+  } else {
+    updateHostComponent(fiber)      // Calls reconcileChildren
+  }
+
+  // Return next unit of work (child, sibling, or parent's sibling)
+  if (fiber.child) return fiber.child
+
+  let nextFiber = fiber
+  while (nextFiber) {
+    if (nextFiber.sibling) return nextFiber.sibling
+    nextFiber = nextFiber.parent
+  }
+}
+```
+
+## Optimization Strategies
+
+### 1. Stable Keys
+
+Use stable, unique keys for list items:
+
+```javascript
+// Good: Database ID
+<li key={item.id}>{item.name}</li>
+
+// Good: Composite key
+<li key={`${item.category}-${item.id}`}>{item.name}</li>
+
+// Bad: Array index (unstable on reorder)
+<li key={index}>{item.name}</li>
+
+// Bad: Random value (recreates every render)
+<li key={Math.random()}>{item.name}</li>
+```
+
+### 2. Component Type Stability
+
+Define components outside render functions:
+
+```javascript
+// Bad: Creates new component type every render
+function Parent() {
+  const Child = () => <div>Child</div>
+  return <Child />  // Always triggers DELETION + PLACEMENT
+}
+
+// Good: Stable component reference
+const Child = () => <div>Child</div>
+function Parent() {
+  return <Child />  // Correctly triggers UPDATE
+}
+```
+
+### 3. Memoization
+
+Use `useMemo` for expensive child arrays:
+
+```javascript
+function DataTable({ data, sortBy }) {
+  const sortedData = useMemo(() => {
+    return [...data].sort((a, b) => a[sortBy] - b[sortBy])
+  }, [data, sortBy])
+
+  return (
+    <table>
+      {sortedData.map(item => (
+        <Row key={item.id} item={item} />
+      ))}
+    </table>
+  )
+}
+```
+
+## Performance Characteristics
+
+<Accordion title="Reconciliation Complexity">
+- **Key lookup**: O(1) using Map
+- **Same-level diffing**: O(n) where n = children count
+- **Tree traversal**: O(n) where n = total nodes
+- **No cross-level moves**: Assumes elements don't move between tree levels
+
+Overall reconciliation is **O(n)** instead of O(n³) naive tree diffing.
+</Accordion>
+
+## Hydration Mismatch Handling
+
+When SSR HTML doesn't match client render:
+
+```javascript
+if (isText || isElement) {
+  fiber.dom = domNode
+  fiber.effectTag = EFFECT_TAGS.HYDRATE
+} else {
+  console.warn(
+    `[Hydration] Mismatch at ${getTypeLabel(fiber.type)}. ` +
+    `Expected ${domNode.tagName} but got ${fiber.type}. ` +
+    `Falling back to CSR.`
+  )
+  state.isHydrating = false
+  state.hydrationFailed = true
+  fiber.dom = createDom(fiber)
+  fiber.effectTag = EFFECT_TAGS.PLACEMENT
+}
+```
+
+<Warning>
+Hydration mismatches trigger a fallback to client-side rendering for the entire subtree, which can be expensive. Ensure SSR and CSR render identical HTML.
+</Warning>
+
+## Best Practices
+
+<Card title="Use Stable Keys" icon="key">
+  Always provide stable, unique keys for list items. Never use array index for dynamic lists.
+</Card>
+
+<Card title="Minimize Prop Changes" icon="minimize">
+  Avoid creating new object/array/function references in render unless necessary. Use useMemo/useCallback.
+</Card>
+
+<Card title="Component Stability" icon="cube">
+  Define components outside render functions to maintain type stability across renders.
+</Card>
+
+## Next Steps
+
+<Card title="Architecture" icon="sitemap" href="/core/architecture">
+  Learn about the fiber architecture and work loop
+</Card>
+
+<Card title="Rendering" icon="paintbrush" href="/core/rendering">
+  Understand CSR, SSR, hydration, and island architecture
+</Card>

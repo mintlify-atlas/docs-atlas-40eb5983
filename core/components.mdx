@@ -1,0 +1,334 @@
+---
+title: 'Built-in Components'
+description: 'Native RyunixJS components for error handling, lazy loading, and advanced rendering patterns'
+---
+
+# Built-in Components
+
+RyunixJS ships with several native components that hook directly into the architecture's reconciler phases.
+
+## Error Handling
+
+### ErrorBoundary
+
+A native component that catches JavaScript errors anywhere in its child component tree.
+
+```javascript
+import { ErrorBoundary } from '@unsetsoft/ryunixjs'
+
+function App() {
+  return (
+    <ErrorBoundary fallback={<div>Something went wrong!</div>}>
+      <RiskyComponent />
+    </ErrorBoundary>
+  )
+}
+```
+
+<Info>
+ErrorBoundary operates inside the `performUnitOfWork` loop. When an unhandled exception is caught during render, the reconciler climbs up the `fiber.parent` chain searching for `RYUNIX_ERROR_BOUNDARY`.
+</Info>
+
+**How it works** (`workers.js:24`):
+
+1. Exception thrown during `updateFunctionComponent` or `updateHostComponent`
+2. Reconciler traverses up the fiber tree to find nearest ErrorBoundary
+3. Sets `stateError` inside the boundary fiber
+4. Dynamically prunes corrupted children
+5. Rewinds the `wipFiber` pointer so the loop safely recovers
+6. Renders the `fallback` prop
+
+```javascript
+while (boundaryFiber) {
+  if (boundaryFiber.type?.ryunix_type === 'RYUNIX_ERROR_BOUNDARY') {
+    foundBoundary = true
+    break
+  }
+  boundaryFiber = boundaryFiber.parent
+}
+
+if (foundBoundary) {
+  boundaryFiber.stateError = error
+  fiber.child = null
+  return boundaryFiber  // Rewind to boundary
+}
+```
+
+<Warning>
+If no ErrorBoundary exists in the tree, the error is fatal and stops the work loop entirely.
+</Warning>
+
+### ServerBoundary
+
+Used to exclusively shield content rendered on the server during Partial Hydration.
+
+```javascript
+import { ServerBoundary } from '@unsetsoft/ryunixjs'
+
+function Page() {
+  return (
+    <div>
+      <InteractiveNav />
+      <ServerBoundary>
+        {/* Static server-rendered content, no hydration */}
+        <StaticMarkdownContent />
+      </ServerBoundary>
+    </div>
+  )
+}
+```
+
+<Tip>
+ServerBoundary is extensively used with Island Architecture (`hydrateIslands()`). Children inside are ignored by the client-side app, preventing hydration mismatches on inherently server-dependent nodes.
+</Tip>
+
+**Use cases:**
+- Dynamic markdown from a database
+- Server-only lists that don't need interactivity
+- SEO-critical static content
+- Heavy content that doesn't require JavaScript
+
+## Asynchronous Loading
+
+### lazy()
+
+Creates a `LazyComponent` for dynamic code splitting with `import()`.
+
+```javascript
+import { lazy, Suspense } from '@unsetsoft/ryunixjs'
+
+const HeavyChart = lazy(() => import('./HeavyChart'))
+
+function Dashboard() {
+  return (
+    <Suspense fallback={<div>Loading chart...</div>}>
+      <HeavyChart data={chartData} />
+    </Suspense>
+  )
+}
+```
+
+**Internal states:**
+- `PENDING`: Module chunk is downloading
+- `RESOLVED`: Module loaded successfully
+- `REJECTED`: Module failed to load
+
+<Info>
+`lazy()` triggers a synchronous `forceUpdate` when the module chunk finishes downloading across the network.
+</Info>
+
+### Suspense
+
+Pairs perfectly with `lazy()` to handle loading states declaratively.
+
+```javascript
+import { Suspense, lazy } from '@unsetsoft/ryunixjs'
+
+const ProfilePage = lazy(() => import('./ProfilePage'))
+const SettingsPage = lazy(() => import('./SettingsPage'))
+
+function App() {
+  return (
+    <Suspense fallback={<Skeleton />}>
+      <ProfilePage />
+      <SettingsPage />
+    </Suspense>
+  )
+}
+```
+
+**Features:**
+- Detects whether any child element inside its tree is `PENDING`
+- Renders `fallback` skeleton UI immediately
+- Powerful with Server-Side Rendering (`renderToReadableStream`)
+
+<Accordion title="How does Suspense work with SSR?">
+When used with `renderToReadableStream`, Suspense:
+
+1. Delegates lazy loading to a background Promise
+2. Streams the `fallback` immediately to the client
+3. When the background task finishes, streams a `<template>` tag
+4. Uses a small JavaScript helper (`$RC`) to swap content into the DOM automatically
+
+This enables **out-of-order streaming** for optimal First Contentful Paint.
+</Accordion>
+
+### preload()
+
+Utility function that immediately invokes chunk fetch before component renders.
+
+```javascript
+import { lazy, preload } from '@unsetsoft/ryunixjs'
+
+const HeavyModal = lazy(() => import('./HeavyModal'))
+
+function Button() {
+  return (
+    <button 
+      onMouseEnter={() => preload(HeavyModal)}
+      onClick={() => setShowModal(true)}
+    >
+      Open Modal
+    </button>
+  )
+}
+```
+
+<Tip>
+Trigger `preload()` on hover events to fetch chunks before user clicks, dramatically reducing perceived load time.
+</Tip>
+
+## Advanced Rendering
+
+### createPortal()
+
+Renders children into a DOM node outside the parent component hierarchy.
+
+```javascript
+import { createPortal } from '@unsetsoft/ryunixjs'
+
+function Modal({ children }) {
+  return createPortal(
+    <div className="modal-overlay">
+      {children}
+    </div>,
+    document.getElementById('modal-root')
+  )
+}
+```
+
+**How it works** (`commits.js:151`):
+
+- Symbol marked as `RYUNIX_PORTAL`
+- During commit phase, `commitWork()` detects the portal fiber
+- Abandons standard parent-child logical appendage
+- Directly maps constructed children DOM nodes into `portalContainer`
+
+```javascript
+if (fiber.type === RYUNIX_PORTAL || fiber._isPortal) {
+  const portalContainer = fiber.containerInfo
+  if (portalContainer) {
+    const portalFiber = fiber.child
+    if (portalFiber) {
+      commitPortalWork(portalFiber, portalContainer)
+    }
+  }
+}
+```
+
+<Info>
+Portals are excellent for top-level z-index modals, tooltips, and any UI that needs to escape parent overflow/positioning constraints.
+</Info>
+
+## MDX Support
+
+### MDXProvider & MDXContent
+
+Native support for MDX compilation with component overrides.
+
+```javascript
+import { MDXProvider, MDXContent } from '@unsetsoft/ryunixjs'
+import { CustomH1, CustomCode } from './components'
+
+const components = {
+  h1: CustomH1,
+  code: CustomCode,
+  // Override default MDX components
+}
+
+function BlogPost({ children }) {
+  return (
+    <MDXProvider value={components}>
+      <MDXContent>{children}</MDXContent>
+    </MDXProvider>
+  )
+}
+```
+
+From `components.js:106`:
+
+```javascript
+const { Provider: MDXProvider, useContext: useMDXComponents } = createContext(
+  'ryunix.mdx',
+  {},
+)
+
+const getMDXComponents = (components) => {
+  const contextComponents = useMDXComponents()
+  return {
+    ...contextComponents,
+    ...components,
+  }
+}
+```
+
+**Features:**
+- Injects `defaultComponents` map
+- Automatically aliases standard HTML tags (`<h1>`, `<p>`, etc.)
+- Exposes `getMDXComponents()` for runtime overloads
+- Supports syntax highlighting components
+
+<Accordion title="Default MDX Components">
+RyunixJS provides optimized defaults for all standard MDX elements:
+
+- **Headings**: h1, h2, h3, h4, h5, h6
+- **Text**: p, a, strong, em, code
+- **Lists**: ul, ol, li
+- **Blocks**: blockquote, pre, hr
+- **Tables**: table, thead, tbody, tr, th, td
+- **Media**: img
+
+All are mapped to `createElement` for consistent rendering.
+</Accordion>
+
+## Image Component
+
+Optimized image component with prop forwarding.
+
+```javascript
+import { Image } from '@unsetsoft/ryunixjs'
+
+function Profile() {
+  return (
+    <Image 
+      src="/avatar.jpg" 
+      alt="User avatar"
+      width={200}
+      height={200}
+      loading="lazy"
+    />
+  )
+}
+```
+
+Implementation from `components.js:102`:
+
+```javascript
+const Image = ({ src, ...props }) => {
+  return createElement('img', { ...props, src })
+}
+```
+
+## Best Practices
+
+<Card title="Error Boundaries" icon="shield-check">
+  Place ErrorBoundaries at strategic points in your component tree to isolate failures and provide graceful degradation.
+</Card>
+
+<Card title="Code Splitting" icon="scissors">
+  Use `lazy()` + `Suspense` for route-based and component-based code splitting to reduce initial bundle size.
+</Card>
+
+<Card title="Server Boundaries" icon="server">
+  Wrap static, non-interactive content in ServerBoundary to reduce client-side JavaScript and improve hydration performance.
+</Card>
+
+## Next Steps
+
+<Card title="Rendering" icon="paintbrush" href="/core/rendering">
+  Learn about client-side rendering, hydration, and island architecture
+</Card>
+
+<Card title="Hooks" icon="link" href="/core/hooks">
+  Explore the comprehensive hooks API for state and side effects
+</Card>

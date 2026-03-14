@@ -1,0 +1,281 @@
+---
+title: '@unsetsoft/ryunix-devtools'
+description: 'Browser DevTools extension for debugging Ryunix applications'
+icon: 'bug'
+---
+
+## Overview
+
+`@unsetsoft/ryunix-devtools` is a browser extension that provides powerful debugging capabilities for RyunixJS applications. It integrates directly into your browser's DevTools to give you deep insights into your application's component tree, state, and performance.
+
+<CardGroup cols={2}>
+  <Card title="Component Tree" icon="diagram-project">
+    Real-time visualization of your component hierarchy
+  </Card>
+  <Card title="Props Inspection" icon="magnifying-glass">
+    Inspect and monitor component props and state
+  </Card>
+  <Card title="Hook Counter" icon="list-ol">
+    Track hook usage and execution order
+  </Card>
+  <Card title="Auto Detection" icon="wifi">
+    Automatically detects Ryunix applications
+  </Card>
+</CardGroup>
+
+<Note>
+  Current version: **1.3.0**
+</Note>
+
+## Installation
+
+### Chrome / Edge
+
+<Steps>
+  <Step title="Download Extension">
+    Clone or download the extension from the repository:
+    ```bash
+    git clone https://github.com/UnSetSoft/Ryunixjs.git
+    cd Ryunixjs/packages/ryunix-devtools
+    ```
+  </Step>
+  
+  <Step title="Open Extensions Page">
+    Navigate to:
+    - Chrome: `chrome://extensions/`
+    - Edge: `edge://extensions/`
+  </Step>
+  
+  <Step title="Enable Developer Mode">
+    Toggle "Developer mode" in the top right corner
+  </Step>
+  
+  <Step title="Load Extension">
+    Click "Load unpacked" and select the `packages/ryunix-devtools` folder
+  </Step>
+</Steps>
+
+## Usage
+
+### Opening DevTools
+
+<Steps>
+  <Step title="Open Browser DevTools">
+    Press `F12` or right-click and select "Inspect"
+  </Step>
+  
+  <Step title="Find Ryunix Tab">
+    Look for the "Ryunix" tab in the DevTools toolbar
+  </Step>
+  
+  <Step title="Auto Detection">
+    The extension will automatically detect if the page is running a Ryunix application
+  </Step>
+</Steps>
+
+<Note>
+  If you don't see the Ryunix tab, make sure your application is built with Ryunix 1.3.0 or later.
+</Note>
+
+## Features
+
+### Component Tree Viewer
+
+<Card icon="tree">
+  Visualize your entire component hierarchy in real-time. Click on any component to inspect its details.
+  
+  **Features:**
+  - Expandable/collapsible tree structure
+  - Component name and type display
+  - Visual indicators for hooks and state
+  - Search and filter components
+</Card>
+
+### Props Inspector
+
+<Card icon="table">
+  View all props passed to a selected component:
+  
+  - Props names and values
+  - Data types
+  - Nested object inspection
+  - Real-time updates when props change
+</Card>
+
+### Hook Counter
+
+<Card icon="calculator">
+  Track hook usage in your components:
+  
+  - Number of hooks used
+  - Hook execution order
+  - Hook type identification
+  - State value inspection
+</Card>
+
+### Performance Profiling
+
+<Card icon="chart-line">
+  Monitor component render performance:
+  
+  - Render count per component
+  - Render duration timing
+  - Identify performance bottlenecks
+  - Highlight unnecessary re-renders
+</Card>
+
+## Browser Compatibility
+
+<CardGroup cols={2}>
+  <Card title="Chrome" icon="chrome">
+    Version 88 or higher
+  </Card>
+  <Card title="Edge" icon="edge">
+    Version 88 or higher
+  </Card>
+</CardGroup>
+
+<Warning>
+  Firefox and Safari support is planned for future releases.
+</Warning>
+
+## Requirements
+
+### RyunixJS Version
+
+The DevTools extension requires:
+
+- **Ryunix 1.3.0** or later
+- Development mode enabled (automatic in dev builds)
+
+### Browser Requirements
+
+- Chrome 88+
+- Edge 88+
+- Developer mode enabled (for installation)
+
+## Development
+
+To build the extension from source:
+
+```bash
+cd packages/ryunix-devtools
+npm run build
+```
+
+This creates a `devtools.zip` file ready for distribution.
+
+## Troubleshooting
+
+### DevTools Tab Not Appearing
+
+<AccordionGroup>
+  <Accordion title="Verify Ryunix Version">
+    Make sure your application uses `@unsetsoft/ryunixjs` version 1.3.0 or higher.
+    
+    ```bash
+    npm list @unsetsoft/ryunixjs
+    ```
+  </Accordion>
+  
+  <Accordion title="Check Development Mode">
+    The DevTools hook is only active in development builds. Verify you're running:
+    
+    ```bash
+    npm run dev
+    ```
+    
+    Not the production build.
+  </Accordion>
+  
+  <Accordion title="Reload Extension">
+    Try reloading the extension:
+    1. Go to `chrome://extensions/`
+    2. Find Ryunix DevTools
+    3. Click the reload icon
+  </Accordion>
+  
+  <Accordion title="Clear Browser Cache">
+    Clear your browser cache and reload the page:
+    - Press `Ctrl+Shift+Delete` (Windows/Linux)
+    - Press `Cmd+Shift+Delete` (Mac)
+  </Accordion>
+</AccordionGroup>
+
+### Extension Not Detecting App
+
+<Steps>
+  <Step title="Check Console">
+    Open the browser console and look for Ryunix initialization messages
+  </Step>
+  
+  <Step title="Verify Installation">
+    Ensure `@unsetsoft/ryunixjs` is installed:
+    ```bash
+    npm install @unsetsoft/ryunixjs
+    ```
+  </Step>
+  
+  <Step title="Reload Page">
+    Hard refresh the page with `Ctrl+Shift+R` (Windows/Linux) or `Cmd+Shift+R` (Mac)
+  </Step>
+</Steps>
+
+## Keyboard Shortcuts
+
+While focused on the Ryunix DevTools panel:
+
+| Shortcut | Action |
+| :--- | :--- |
+| `Ctrl+F` / `Cmd+F` | Search components |
+| `↑` / `↓` | Navigate component tree |
+| `→` | Expand component |
+| `←` | Collapse component |
+| `Ctrl+R` / `Cmd+R` | Refresh tree |
+
+## Privacy & Security
+
+<Info>
+  The Ryunix DevTools extension:
+  - Only activates on pages running RyunixJS
+  - Does not collect or transmit any data
+  - Runs entirely locally in your browser
+  - Open source - inspect the code yourself
+</Info>
+
+## Contributing
+
+The DevTools extension is part of the main RyunixJS repository:
+
+1. Fork the repository
+2. Make changes in `packages/ryunix-devtools/`
+3. Test your changes locally
+4. Submit a pull request
+
+## Planned Features
+
+<CardGroup cols={2}>
+  <Card title="Time Travel Debugging" icon="clock-rotate-left">
+    Step through state changes over time
+  </Card>
+  <Card title="Network Inspector" icon="network-wired">
+    Monitor server actions and data fetching
+  </Card>
+  <Card title="State Editor" icon="pen-to-square">
+    Modify component state directly from DevTools
+  </Card>
+  <Card title="Export/Import State" icon="file-export">
+    Save and restore application state for testing
+  </Card>
+</CardGroup>
+
+## Resources
+
+<CardGroup cols={2}>
+  <Card title="GitHub Repository" icon="github" href="https://github.com/UnSetSoft/Ryunixjs">
+    View source code and contribute
+  </Card>
+  <Card title="Report Issues" icon="bug" href="https://github.com/UnSetSoft/Ryunixjs/issues">
+    Found a bug? Let us know
+  </Card>
+</CardGroup>

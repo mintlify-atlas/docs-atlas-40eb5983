@@ -1,0 +1,217 @@
+---
+title: "Priority"
+description: "Priority-based update scheduling for optimal performance"
+---
+
+## Priority
+
+Priority levels for categorizing and scheduling updates based on their urgency.
+
+```javascript
+import { Priority } from '@ryunixjs/core'
+```
+
+### Priority Levels
+
+<ParamField path="IMMEDIATE" type="number" default="1">
+  Highest priority for critical user interactions like clicks and typing. These updates should be processed immediately.
+</ParamField>
+
+<ParamField path="USER_BLOCKING" type="number" default="2">
+  High priority for interactions that block user actions, such as hover effects and scroll events.
+</ParamField>
+
+<ParamField path="NORMAL" type="number" default="3">
+  Default priority for standard updates like data fetching results and regular state changes.
+</ParamField>
+
+<ParamField path="LOW" type="number" default="4">
+  Low priority for non-critical updates like analytics and logging.
+</ParamField>
+
+<ParamField path="IDLE" type="number" default="5">
+  Lowest priority for background tasks that can be deferred until the browser is idle.
+</ParamField>
+
+---
+
+## scheduleUpdate
+
+Schedules an update with a specific priority level. Updates are processed based on their priority and available browser time.
+
+```javascript
+import { scheduleUpdate, Priority } from '@ryunixjs/core'
+
+scheduleUpdate(callback, priority)
+```
+
+<ParamField path="callback" type="Function" required>
+  The update function to execute
+</ParamField>
+
+<ParamField path="priority" type="number" default="Priority.NORMAL">
+  Priority level for the update (defaults to `Priority.NORMAL`)
+</ParamField>
+
+### Example
+
+```javascript
+import { scheduleUpdate, Priority } from '@ryunixjs/core'
+
+// High priority user interaction
+const handleClick = () => {
+  scheduleUpdate(() => {
+    updateUI()
+  }, Priority.IMMEDIATE)
+}
+
+// Low priority analytics
+const trackEvent = () => {
+  scheduleUpdate(() => {
+    sendAnalytics()
+  }, Priority.LOW)
+}
+
+// Background data prefetch
+const prefetchData = () => {
+  scheduleUpdate(() => {
+    fetchNextPage()
+  }, Priority.IDLE)
+}
+```
+
+---
+
+## runWithPriority
+
+Executes a callback with a specific priority context. The priority is restored after execution.
+
+```javascript
+import { runWithPriority, Priority } from '@ryunixjs/core'
+
+const result = runWithPriority(priority, callback)
+```
+
+<ParamField path="priority" type="number" required>
+  Priority level to use during callback execution
+</ParamField>
+
+<ParamField path="callback" type="Function" required>
+  Function to execute with the specified priority
+</ParamField>
+
+<ResponseField name="return" type="any">
+  Returns the result of the callback function
+</ResponseField>
+
+### Example
+
+```javascript
+import { runWithPriority, Priority } from '@ryunixjs/core'
+
+// Execute state update with high priority
+const value = runWithPriority(Priority.IMMEDIATE, () => {
+  setState(newValue)
+  return computeValue()
+})
+
+// Background computation
+runWithPriority(Priority.IDLE, () => {
+  processLargeDataset()
+})
+```
+
+---
+
+## getCurrentPriority
+
+Returns the current priority context.
+
+```javascript
+import { getCurrentPriority } from '@ryunixjs/core'
+
+const priority = getCurrentPriority()
+```
+
+<ResponseField name="return" type="number">
+  Returns the current priority level (defaults to `Priority.NORMAL`)
+</ResponseField>
+
+### Example
+
+```javascript
+import { getCurrentPriority, Priority } from '@ryunixjs/core'
+
+function MyComponent() {
+  const priority = getCurrentPriority()
+  
+  if (priority === Priority.IMMEDIATE) {
+    // Use optimized rendering for high priority
+  }
+}
+```
+
+---
+
+## createPriorityDispatch
+
+Wraps a dispatch function with priority scheduling capabilities.
+
+```javascript
+import { createPriorityDispatch } from '@ryunixjs/core'
+
+const priorityDispatch = createPriorityDispatch(dispatch)
+```
+
+<ParamField path="dispatch" type="Function" required>
+  The original dispatch function to wrap
+</ParamField>
+
+<ResponseField name="return" type="Function">
+  Returns a wrapped dispatch function that accepts an optional priority parameter:
+  
+  `(action, priority?) => void`
+</ResponseField>
+
+### Example
+
+```javascript
+import { createPriorityDispatch, Priority } from '@ryunixjs/core'
+import { useReducer } from '@ryunixjs/core'
+
+function MyComponent() {
+  const [state, dispatch] = useReducer(reducer, initialState)
+  const priorityDispatch = createPriorityDispatch(dispatch)
+
+  const handleUserClick = () => {
+    // High priority update
+    priorityDispatch({ type: 'UPDATE' }, Priority.IMMEDIATE)
+  }
+
+  const handleAnalytics = () => {
+    // Low priority update
+    priorityDispatch({ type: 'TRACK' }, Priority.LOW)
+  }
+
+  return (
+    <button onClick={handleUserClick}>Click Me</button>
+  )
+}
+```
+
+### Best Practices
+
+- Use `IMMEDIATE` for user input and critical UI updates
+- Use `USER_BLOCKING` for hover, focus, and scroll interactions
+- Use `NORMAL` for data fetching and standard updates (default)
+- Use `LOW` for analytics, logging, and non-critical updates
+- Use `IDLE` for background tasks and prefetching
+
+### How It Works
+
+The priority system uses `requestIdleCallback` to process updates during browser idle time. Updates are:
+
+1. Queued with their priority level and timestamp
+2. Sorted by priority (lower number = higher priority)
+3. Processed in batches during idle periods
+4. Interrupted if higher priority updates arrive

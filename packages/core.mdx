@@ -1,0 +1,264 @@
+---
+title: '@unsetsoft/ryunixjs'
+description: 'The foundational engine of the RyunixJS framework'
+icon: 'cube'
+---
+
+## Overview
+
+`@unsetsoft/ryunixjs` is the **foundational engine** of the RyunixJS framework. It's a lightweight, high-performance library responsible for reconciliation, hooks, concurrent rendering, and server-side rendering.
+
+<CardGroup cols={2}>
+  <Card title="Fiber Architecture" icon="diagram-project">
+    Efficiently updates the DOM by comparing Virtual DOM trees with an advanced reconciliation algorithm
+  </Card>
+  <Card title="Hooks System" icon="hook">
+    Provides core state and lifecycle management with hooks like `useStore`, `useEffect`, and more
+  </Card>
+  <Card title="Concurrent Rendering" icon="bolt">
+    Support for prioritized updates and transitions for optimal performance
+  </Card>
+  <Card title="SSR & Hydration" icon="server">
+    Server-Side Rendering engines for both Node.js and Edge environments
+  </Card>
+</CardGroup>
+
+## Installation
+
+<CodeGroup>
+```bash npm
+npm install @unsetsoft/ryunixjs
+```
+
+```bash yarn
+yarn add @unsetsoft/ryunixjs
+```
+
+```bash pnpm
+pnpm add @unsetsoft/ryunixjs
+```
+</CodeGroup>
+
+<Note>
+  Current stable version: **1.2.4-canary.17**
+</Note>
+
+## Core Functions
+
+The core package exports several fundamental functions for working with RyunixJS:
+
+### Element Creation
+
+- **`createElement(type, props, ...children)`** - Creates a Virtual DOM element
+- **`Fragment`** - Render multiple children without a wrapper element
+- **`cloneElement(element, props, ...children)`** - Clone and return a new element
+- **`isValidElement(element)`** - Verify if a value is a valid Ryunix element
+
+### Rendering
+
+- **`render(element, container)`** - Renders a Ryunix element into the DOM
+- **`hydrate(element, container)`** - Hydrates server-rendered HTML
+- **`hydrateIslands()`** - Hydrates island components for partial hydration
+- **`init()`** - Initializes the Ryunix state
+- **`safeRender(element, container)`** - Renders with error boundaries
+
+### Server-Side Rendering
+
+- **`renderToString(element)`** - Renders element to HTML string (Node.js)
+- **`renderToReadableStream(element)`** - Renders to a readable stream (Edge/Streaming)
+
+## Hooks
+
+RyunixJS provides a comprehensive set of hooks for state management and side effects:
+
+### State Management
+
+| Hook | Description |
+| :--- | :--- |
+| `useStore(initial)` | State management (Ryunix equivalent of `useState`) |
+| `useReducer(reducer, initial)` | Advanced state management with reducers |
+| `usePersistentStore(key, initial)` | Automatically syncs state with `localStorage` |
+| `useSwitch(initial)` | Optimized toggle state hook |
+
+### Side Effects
+
+| Hook | Description |
+| :--- | :--- |
+| `useEffect(cb, deps)` | Side effects management |
+| `useLayoutEffect(cb, deps)` | Synchronous side effects before browser paint |
+
+### Memoization
+
+| Hook | Description |
+| :--- | :--- |
+| `useMemo(cb, deps)` | Memoized values |
+| `useCallback(cb, deps)` | Memoized functions |
+| `memo(Component)` | Memoize component to prevent unnecessary re-renders |
+
+### Utilities
+
+| Hook | Description |
+| :--- | :--- |
+| `useRef(initial)` | Persistent reference across renders |
+| `useContext(id)` | Consumes a context value |
+| `useId()` | Generates unique, stable IDs for SSR |
+| `useDebounce(value, delay)` | Debounces a value update |
+| `useThrottle(value, interval)` | Throttles value updates |
+| `useQuery()` | Reactive URL parameters |
+| `useHash()` | Reactive URL hash |
+
+### Concurrency
+
+| Hook | Description |
+| :--- | :--- |
+| `useTransition()` | Manage non-urgent UI updates |
+| `useDeferredValue(value)` | Defer updating a value |
+| `useProfiler()` | Profile component performance |
+
+## Advanced Features
+
+### Error Handling
+
+```javascript
+import { ErrorBoundary } from '@unsetsoft/ryunixjs';
+
+function App() {
+  return (
+    <ErrorBoundary fallback={<div>Something went wrong</div>}>
+      <YourComponent />
+    </ErrorBoundary>
+  );
+}
+```
+
+### Server Boundaries
+
+```javascript
+import { ServerBoundary } from '@unsetsoft/ryunixjs';
+
+function App() {
+  return (
+    <ServerBoundary fallback={<div>Loading...</div>}>
+      <ServerComponent />
+    </ServerBoundary>
+  );
+}
+```
+
+### Code Splitting
+
+```javascript
+import { lazy, Suspense } from '@unsetsoft/ryunixjs';
+
+const LazyComponent = lazy(() => import('./HeavyComponent'));
+
+function App() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <LazyComponent />
+    </Suspense>
+  );
+}
+```
+
+## Example Usage
+
+```javascript
+import { render, useStore, createElement } from '@unsetsoft/ryunixjs';
+
+function Counter() {
+  const [count, setCount] = useStore(0);
+
+  return createElement('div', null,
+    createElement('h1', null, `Count: ${count}`),
+    createElement('button', { 
+      onClick: () => setCount(count + 1) 
+    }, 'Increment')
+  );
+}
+
+render(createElement(Counter), document.getElementById('root'));
+```
+
+### With JSX
+
+```jsx
+import { render, useStore } from '@unsetsoft/ryunixjs';
+
+function Counter() {
+  const [count, setCount] = useStore(0);
+
+  return (
+    <div>
+      <h1>Count: {count}</h1>
+      <button onClick={() => setCount(count + 1)}>Increment</button>
+    </div>
+  );
+}
+
+render(<Counter />, document.getElementById('root'));
+```
+
+## Other Exports
+
+### Batching
+
+- **`batchUpdates(callback)`** - Batch multiple state updates into a single render
+
+### Portals
+
+- **`createPortal(children, container)`** - Render children into a different DOM node
+
+### Refs
+
+- **`forwardRef(Component)`** - Forward refs to child components
+
+### Server Actions
+
+- **`createActionProxy(action)`** - Create server action proxies for RPC-style calls
+
+### Profiling
+
+- **`profiler(Component)`** - Profile component render performance
+- **`withProfiler(Component)`** - HOC for profiling
+
+## MDX Components
+
+When using MDX, the core package also exports:
+
+- **`Image`** - Optimized image component
+- **`MDXContent`** - MDX content wrapper
+- **`MDXProvider`** - Provide custom components to MDX
+- **`useMDXComponents()`** - Access MDX components from context
+- **`getMDXComponents()`** - Get MDX component mapping
+- **`defaultComponents`** - Default MDX component set
+
+## Utility Functions
+
+- **`shallowEqual(obj1, obj2)`** - Shallow equality comparison
+- **`deepEqual(obj1, obj2)`** - Deep equality comparison
+- **`getState()`** - Access internal Ryunix state (for debugging)
+
+## TypeScript Support
+
+The package includes TypeScript definitions via JSX runtime exports:
+
+- `@unsetsoft/ryunixjs/jsx-runtime`
+- `@unsetsoft/ryunixjs/jsx-dev-runtime`
+
+## Engine Requirements
+
+<Warning>
+  Requires Node.js **^20 || ^22 || ^24**
+</Warning>
+
+## Resources
+
+<CardGroup cols={2}>
+  <Card title="GitHub Repository" icon="github" href="https://github.com/UnSetSoft/Ryunixjs">
+    View source code and contribute
+  </Card>
+  <Card title="Report Issues" icon="bug" href="https://github.com/UnSetSoft/Ryunixjs/issues">
+    Found a bug? Let us know
+  </Card>
+</CardGroup>

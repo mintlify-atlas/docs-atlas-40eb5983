@@ -1,0 +1,303 @@
+---
+title: create-ryunix-app
+description: Scaffold a new Ryunix application
+---
+
+## Usage
+
+```bash
+npx create-ryunix-app [directory] [options]
+```
+
+## Quick Start
+
+### Interactive Mode
+
+```bash
+npx create-ryunix-app
+```
+
+The CLI will prompt you for:
+- Project name
+- Ryunix channel (Latest/Canary)
+- Tailwind CSS preference
+- ESLint configuration
+- VS Code settings
+
+### Non-Interactive Mode
+
+```bash
+npx create-ryunix-app my-app --latest --tailwind --eslint --vscode
+```
+
+## Arguments
+
+### `[directory]`
+
+Optional project directory name. If omitted, you'll be prompted to enter one.
+
+```bash
+npx create-ryunix-app my-ryunix-app
+```
+
+## Options
+
+### `--latest`
+
+Use the Latest (stable) channel for Ryunix dependencies.
+
+```bash
+npx create-ryunix-app my-app --latest
+```
+
+This is the **default** if neither `--latest` nor `--canary` is specified.
+
+### `--canary`
+
+Use the Canary (cutting-edge) channel for Ryunix dependencies.
+
+```bash
+npx create-ryunix-app my-app --canary
+```
+
+The Canary channel includes:
+- Latest features and improvements
+- Potentially unstable code
+- Frequent updates
+
+### `--tailwind`
+
+Initialize the project with Tailwind CSS configuration.
+
+```bash
+npx create-ryunix-app my-app --tailwind
+```
+
+Adds:
+- `tailwind.config.js`
+- PostCSS configuration
+- Tailwind directives in CSS
+
+### `--eslint`
+
+Initialize the project with ESLint configuration.
+
+```bash
+npx create-ryunix-app my-app --eslint
+```
+
+Includes:
+- Ryunix ESLint preset
+- React-specific rules
+- `.eslintrc` configuration
+
+### `--vscode`
+
+Add VS Code workspace settings optimized for Ryunix development.
+
+```bash
+npx create-ryunix-app my-app --vscode
+```
+
+Creates:
+- `.vscode/settings.json`
+- `.vscode/extensions.json` (recommended extensions)
+- Editor configurations for `.ryx` files
+
+### `-v, --version`
+
+Display the current version of `create-ryunix-app`.
+
+```bash
+npx create-ryunix-app --version
+```
+
+### `-h, --help`
+
+Display help information.
+
+```bash
+npx create-ryunix-app --help
+```
+
+## Examples
+
+### Minimal Setup
+
+```bash
+npx create-ryunix-app my-app
+```
+
+Creates a basic Ryunix application with no additional configuration.
+
+### Full-Featured Setup
+
+```bash
+npx create-ryunix-app my-app --latest --tailwind --eslint --vscode
+```
+
+Creates a production-ready setup with:
+- Latest stable Ryunix version
+- Tailwind CSS for styling
+- ESLint for code quality
+- VS Code optimizations
+
+### Canary Build with Tailwind
+
+```bash
+npx create-ryunix-app bleeding-edge --canary --tailwind
+```
+
+Creates a project with cutting-edge features and Tailwind CSS.
+
+## Interactive Prompts
+
+### Project Name
+
+```
+What is your project named?
+› my-ryunix-app
+```
+
+Default: `my-ryunix-app`
+
+### Release Channel
+
+```
+Which Ryunix channel do you want to use?
+❯ Latest - Stable release
+  Canary - Cutting edge features (unstable)
+```
+
+Default: `Latest`
+
+### Tailwind CSS
+
+```
+Would you like to use Tailwind CSS?
+› Yes / No
+```
+
+Default: `Yes`
+
+### ESLint
+
+```
+Would you like to use ESLint?
+› Yes / No
+```
+
+Default: `Yes`
+
+### VS Code Extension
+
+```
+Would you like to configure the Ryunix VS Code Extension workspace?
+› Yes / No
+```
+
+Default: `Yes`
+
+## Project Structure
+
+A newly created Ryunix app has the following structure:
+
+```
+my-ryunix-app/
+├── src/
+│   ├── App.ryx          # Root application component
+│   └── index.js         # Application entry point
+├── public/
+│   └── favicon.ico      # Default favicon
+├── .gitignore
+├── package.json
+├── ryunix.config.js     # Ryunix configuration
+└── README.md
+```
+
+### With Optional Features
+
+If you enable optional features:
+
+```
+my-ryunix-app/
+├── src/
+├── public/
+├── .vscode/             # (--vscode)
+│   ├── settings.json
+│   └── extensions.json
+├── .eslintrc.js         # (--eslint)
+├── tailwind.config.js   # (--tailwind)
+├── postcss.config.js    # (--tailwind)
+├── .gitignore
+├── package.json
+├── ryunix.config.js
+└── README.md
+```
+
+## Channel Differences
+
+### Latest (Stable)
+
+- **Recommended for:** Production applications
+- **Update frequency:** Every few weeks
+- **Stability:** High
+- **Testing:** Thoroughly tested
+
+### Canary (Unstable)
+
+- **Recommended for:** Experimentation, early testing
+- **Update frequency:** Daily/weekly
+- **Stability:** Variable
+- **Testing:** Limited
+
+## Next Steps
+
+After creating your app:
+
+```bash
+cd my-app
+npm run dev
+```
+
+Your application will be available at `http://localhost:3000`
+
+## Troubleshooting
+
+### "Project name cannot be empty"
+
+Provide a valid project name:
+
+```bash
+npx create-ryunix-app my-app
+```
+
+### "Directory already exists"
+
+Choose a different directory name or remove the existing one:
+
+```bash
+rm -rf my-app
+npx create-ryunix-app my-app
+```
+
+### Network Issues
+
+If package installation fails, try:
+
+```bash
+npm cache clean --force
+npx create-ryunix-app my-app
+```
+
+## Environment Requirements
+
+- **Node.js:** 18.0.0 or higher
+- **npm:** 9.0.0 or higher (or yarn/pnpm equivalent)
+- **Operating Systems:** macOS, Linux, Windows (WSL recommended)
+
+## Related Commands
+
+- [`ryunix dev`](/cli/dev) - Start development server
+- [`ryunix build`](/cli/build) - Build for production
+- [`ryunix lint`](/cli/lint) - Lint your code

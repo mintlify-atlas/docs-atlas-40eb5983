@@ -1,0 +1,398 @@
+---
+title: 'CLI & Server Architecture'
+description: 'Command-line interface and development/production server documentation'
+---
+
+# CLI & Server Architecture
+
+The Ryunix preset ships with a powerful CLI and two dedicated server modes optimized for development and production environments.
+
+## CLI Commands
+
+The CLI is built using `yargs` and provides core commands to manage your Ryunix application.
+
+**Location**: `webpack/bin/index.mjs:1`
+
+### `dev` - Development Server
+
+Starts the Webpack Dev Server with Hot Module Replacement.
+
+```bash
+ryunix dev
+```
+
+**What it does:**
+
+1. Sets `RYUNIX_MODE=development`
+2. Clears `.ryunix/cache` directory
+3. Finds an available port (defaults to 3000, auto-increments if occupied)
+4. Launches webpack-dev-server with HMR
+5. Enables SSR middleware if configured
+6. Displays server info in a formatted box
+
+**Options:**
+
+```bash
+# Open browser automatically
+ryunix dev --browser
+```
+
+### `build` - Production Build
+
+Executes the Dual Compiler for client and server targets.
+
+```bash
+ryunix build
+```
+
+<Steps>
+  <Step title="Clean Output">
+    Removes `.ryunix/static/` and `.ryunix/server/app/` (keeps cache for speed)
+  </Step>
+  <Step title="Webpack Compilation">
+    Runs multi-compiler for client and server bundles
+  </Step>
+  <Step title="SSG Prerendering">
+    If `production: true` and routes configured, generates static HTML
+  </Step>
+  <Step title="Success Report">
+    Displays build time and API routes discovered
+  </Step>
+</Steps>
+
+**Output:**
+
+```bash
+○  API routes (3):
+   ✔ /api/
+   ✔ /api/users
+   ✔ /api/posts
+
+✔ Compilation successful! 🎉
+Done in 12.4s
+```
+
+**Location**: `webpack/bin/index.mjs:119`
+
+### `start` - Production Server
+
+Launches the native Node.js production server.
+
+```bash
+ryunix start
+```
+
+<Warning>
+  Requires a pre-existing `.ryunix/static` build. Run `ryunix build` first.
+</Warning>
+
+**Features:**
+- Native `http` server (no Express overhead)
+- 50MB LRU file cache
+- Brotli/Gzip compression
+- HTTP Range support for media streaming
+- ETag validation for 304 responses
+
+**Location**: `webpack/bin/index.mjs:80`
+
+### `lint` - Code Linting
+
+Runs ESLint against configured files.
+
+```bash
+# Check for errors
+ryunix lint
+
+# Auto-fix issues
+ryunix lint --fix
+```
+
+**Location**: `webpack/bin/index.mjs:27`
+
+### `customHtml` - Extract HTML Template
+
+<Warning>
+  This command is deprecated. Prefer using custom templates via `legacy.template` in config.
+</Warning>
+
+Extracts the default `index.html` template to `/public`.
+
+```bash
+ryunix customHtml
+```
+
+## Development Server
+
+The dev server wraps `webpack-dev-server` with custom middleware for SSR and API handling.
+
+**Location**: `webpack/bin/dev.server.mjs:1`
+
+### Port Detection
+
+Automatically finds an available port using native `net.createServer`:
+
+```javascript
+const checkPortInUse = (port) => {
+  return new Promise((resolve, reject) => {
+    const server = net.createServer()
+    server.once('error', (err) => {
+      if (err.code === 'EADDRINUSE') {
+        resolve(true) // Port in use
+      }
+    })
+    server.once('listening', () => {
+      server.close()
+      resolve(false) // Port available
+    })
+    server.listen(port)
+  })
+}
+```
+
+**Location**: `webpack/bin/dev.server.mjs:17`
+
+### Middleware Pipeline
+
+The dev server sets up three critical middlewares:
+
+<Steps>
+  <Step title="Server Actions Middleware">
+    Captures `POST /_ryunix/action` requests and executes server actions from the global registry.
+
+    ```javascript
+    if (req.method === 'POST' && req.url === '/_ryunix/action') {
+      const { actionId, args } = JSON.parse(body);
+      const action = global.__RYUNIX_SERVER_ACTIONS__?.[actionId];
+      const result = await action(...args);
+      res.end(JSON.stringify(result));
+    }
+    ```
+
+    **Location**: `webpack/webpack.config.mjs:401`
+  </Step>
+
+  <Step title="API Routes Middleware">
+    Pipes `/api/*` requests through the compiled API handlers.
+
+    ```javascript
+    const apiRootPath = resolveApp(dir, `${config.buildDir}/server/api`)
+    const handled = await handleApiRequest(req, res, apiRootPath)
+    ```
+
+    **Location**: `webpack/webpack.config.mjs:431`
+  </Step>
+
+  <Step title="SSR Middleware">
+    Renders routes server-side using `renderDevRoute`:
+
+    - Intercepts `GET` requests for HTML
+    - Loads the server bundle (`app-router-server.bundle.mjs`)
+    - Executes `renderToReadableStream` on the backend
+    - Injects CSS `<link>` tags
+    - Serves pre-rendered HTML to eliminate blank screens
+
+    **Location**: `webpack/webpack.config.mjs:443`
+  </Step>
+</Steps>
+
+### Cache Management
+
+Development mode clears the cache directory on startup to ensure fresh builds:
+
+```javascript
+if (!mode) {
+  cleanCacheDir(cacheDir)
+}
+```
+
+**Location**: `webpack/bin/dev.server.mjs:57`
+
+## Production Server
+
+The production server is a highly optimized, native Node.js HTTP server designed for maximum performance.
+
+**Location**: `webpack/bin/prod.server.mjs:1`
+
+### In-Memory File Cache
+
+Implements a 50MB LRU-style cache to avoid repetitive disk I/O:
+
+```javascript
+const fileCache = new Map()
+const MAX_CACHE_SIZE = 50 * 1024 * 1024 // 50MB
+let currentCacheSize = 0
+```
+
+Cached entries include:
+- Original file content
+- Brotli-compressed version
+- Gzip-compressed version
+- ETag hash (MD5)
+- MIME type
+
+**Location**: `webpack/bin/prod.server.mjs:57`
+
+### Dynamic Compression
+
+Automatically detects `Accept-Encoding` and serves the best format:
+
+```javascript
+const getAcceptedEncoding = (headers) => {
+  const encoding = headers['accept-encoding'] || ''
+  if (encoding.includes('br')) return 'br'       // Brotli preferred
+  if (encoding.includes('gzip')) return 'gzip'  // Gzip fallback
+  return null
+}
+```
+
+Brotli uses quality level 6 for optimal compression/speed balance:
+
+```javascript
+brotliCompress(content, {
+  params: {
+    [zlib.constants.BROTLI_PARAM_QUALITY]: 6
+  }
+})
+```
+
+**Location**: `webpack/bin/prod.server.mjs:97`
+
+### HTTP Range Support
+
+Fully supports `206 Partial Content` for streaming media:
+
+```javascript
+const parseRange = (rangeHeader, fileSize) => {
+  const parts = rangeHeader.replace(/bytes=/, '').split('-')
+  const start = parseInt(parts[0], 10)
+  const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1
+  return { start, end, length: end - start + 1 }
+}
+```
+
+**Example response:**
+
+```http
+HTTP/1.1 206 Partial Content
+Content-Range: bytes 0-1023/5242880
+Content-Length: 1024
+Content-Type: video/mp4
+```
+
+This enables native `<video>` and `<audio>` seeking directly from the server.
+
+**Location**: `webpack/bin/prod.server.mjs:119`
+
+### ETag Validation
+
+Generates MD5 hashes of file contents for aggressive browser caching:
+
+```javascript
+const generateETag = (content) => {
+  return createHash('md5').update(content).digest('hex')
+}
+
+// Check for 304 Not Modified
+if (req.headers['if-none-match'] === cached.etag) {
+  res.writeHead(304)
+  res.end()
+  return true
+}
+```
+
+**Location**: `webpack/bin/prod.server.mjs:90`
+
+### API Routing
+
+Pipes `/api/*` requests through `handleApiRequest` before static file serving:
+
+```javascript
+const apiRootPath = path.join(rootDir, config.buildDir, 'server/api')
+const handledApi = await handleApiRequest(req, res, apiRootPath)
+if (handledApi) return
+```
+
+**Location**: `webpack/bin/prod.server.mjs:382`
+
+### SPA Fallback
+
+If a route isn't found as a static HTML file, serves `index.html`:
+
+```javascript
+const candidates = [
+  path.join(staticDir, pathname, 'index.html'),  // /about → /about/index.html
+  path.join(staticDir, `${pathname}.html`),      // /about → /about.html
+  path.join(staticDir, 'index.html')             // SPA fallback
+]
+```
+
+This allows the client-side router to handle navigation.
+
+**Location**: `webpack/bin/prod.server.mjs:289`
+
+### Security
+
+Validates paths to prevent directory traversal attacks:
+
+```javascript
+const validatePath = (requestPath, rootDir) => {
+  const normalizedPath = path.normalize(requestPath)
+  const resolvedPath = path.resolve(rootDir, normalizedPath.slice(1))
+
+  if (!resolvedPath.startsWith(rootDir)) {
+    return null  // Outside root directory
+  }
+
+  return resolvedPath
+}
+```
+
+**Location**: `webpack/bin/prod.server.mjs:72`
+
+## MIME Type Handling
+
+Comprehensive MIME type dictionary supporting:
+
+- JavaScript: `.js`, `.mjs`
+- Stylesheets: `.css`
+- Images: `.png`, `.jpg`, `.svg`, `.gif`, `.ico`
+- Fonts: `.woff`, `.woff2`, `.ttf`, `.eot`, `.otf`
+- Video: `.mp4`, `.webm`, `.mov`, `.avi`, `.mkv`
+- Audio: `.mp3`, `.ogg`
+- Archives: `.zip`, `.gz`, `.tar`, `.7z`, `.rar`
+- Documents: `.pdf`
+
+**Location**: `webpack/bin/prod.server.mjs:16`
+
+## Request Handler Flow
+
+<Steps>
+  <Step title="Parse Request">
+    Decode pathname from URL
+  </Step>
+  <Step title="Check API Routes">
+    If `/api/*`, execute handler and return
+  </Step>
+  <Step title="Validate Path">
+    Prevent directory traversal attacks
+  </Step>
+  <Step title="Try Static File">
+    Serve from cache or disk with compression
+  </Step>
+  <Step title="Fallback to HTML">
+    Try route-specific HTML or SPA fallback
+  </Step>
+</Steps>
+
+**Location**: `webpack/bin/prod.server.mjs:369`
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Configuration" icon="gear" href="/webpack/configuration">
+    Customize build and server settings
+  </Card>
+  <Card title="Routing & SSR" icon="route" href="/webpack/routing-ssr-ssg">
+    Learn about file-system routing
+  </Card>
+</CardGroup>

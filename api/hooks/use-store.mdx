@@ -1,0 +1,99 @@
+---
+title: "useStore"
+description: "Primary state management hook for RyunixJS"
+---
+
+## Overview
+
+The primary state hook for managing component state in RyunixJS, analogous to React's `useState`. Under the hood, it uses `useReducer` with a flexible reducer that handles both direct values and updater functions.
+
+## Signature
+
+```typescript
+function useStore<T>(initialState: T | (() => T)): [T, (action: T | ((prev: T) => T)) => void]
+```
+
+<ParamField path="initialState" type="T | (() => T)" required>
+  The initial state value or a function that returns the initial state. If a function is provided, it will be called only once during initialization.
+</ParamField>
+
+<ResponseField name="state" type="T">
+  The current state value.
+</ResponseField>
+
+<ResponseField name="dispatch" type="(action: T | ((prev: T) => T)) => void">
+  Function to update the state. Accepts either a new value directly or an updater function that receives the previous state and returns the new state.
+</ResponseField>
+
+## Usage
+
+### Basic State
+
+```javascript
+import { useStore } from '@ryunixjs/core'
+
+const Counter = () => {
+  const [count, setCount] = useStore(0)
+
+  return (
+    <div>
+      <p>Count: {count}</p>
+      <button onClick={() => setCount(count + 1)}>Increment</button>
+    </div>
+  )
+}
+```
+
+### Functional Updates
+
+```javascript
+const TodoList = () => {
+  const [todos, setTodos] = useStore([])
+
+  const addTodo = (text) => {
+    // Use functional update to ensure we work with latest state
+    setTodos(prev => [...prev, { id: Date.now(), text }])
+  }
+
+  const removeTodo = (id) => {
+    setTodos(prev => prev.filter(todo => todo.id !== id))
+  }
+
+  return (
+    <div>
+      {todos.map(todo => (
+        <div key={todo.id}>
+          {todo.text}
+          <button onClick={() => removeTodo(todo.id)}>Remove</button>
+        </div>
+      ))}
+    </div>
+  )
+}
+```
+
+### Lazy Initialization
+
+```javascript
+const ExpensiveComponent = () => {
+  // Function is only called once during initialization
+  const [data, setData] = useStore(() => {
+    return computeExpensiveInitialValue()
+  })
+
+  return <div>{data}</div>
+}
+```
+
+## Behavior
+
+- During server-side rendering, `useStore` returns the initial state and a no-op dispatch function
+- State updates are batched and scheduled through RyunixJS's reconciliation system
+- The dispatch function queues updates and triggers a re-render via `scheduleWork`
+- Multiple state updates in the same event handler are automatically batched
+
+## Related Hooks
+
+- [useReducer](/api/hooks/use-reducer) - For complex state logic
+- [usePersistentStore](/api/hooks/use-store#persistent-store) - For localStorage-backed state
+- [useTransition](/api/hooks/use-transition) - For non-urgent state updates

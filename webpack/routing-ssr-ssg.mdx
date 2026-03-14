@@ -1,0 +1,648 @@
+---
+title: 'Routing, SSR & SSG'
+description: 'File-system routing, Server-Side Rendering, and Static Site Generation'
+---
+
+# Routing, SSR & SSG
+
+RyunixJS uses powerful custom Webpack plugins to implement file-system routing with automatic SSR/SSG support.
+
+## AppRouterPlugin
+
+The App Router Plugin scans your `/app` directory at compile time and generates optimized routing trees.
+
+**Location**: `webpack/utils/appRouterPlugin.mjs:4`
+
+### File-System Conventions
+
+The plugin recognizes these special files:
+
+<CardGroup cols={2}>
+  <Card title="layout.ryx" icon="layer-group">
+    Shared UI that wraps child routes. Can be nested.
+  </Card>
+  <Card title="index.ryx" icon="file">
+    Page component for the route segment.
+  </Card>
+  <Card title="error.ryx" icon="triangle-exclamation">
+    Error boundary fallback for the segment.
+  </Card>
+  <Card title="loading.ryx" icon="spinner">
+    Suspense fallback while async components load.
+  </Card>
+</CardGroup>
+
+### Component Detection
+
+The plugin automatically determines if a component is a Server or Client Component:
+
+<Steps>
+  <Step title="Explicit Directives">
+    Check for `// @server` or `// @client` comments at the top of the file.
+
+    ```javascript
+    // @server
+    export default async function ServerPage() {
+      const data = await fetch('/api/data')
+      return <div>{data}</div>
+    }
+    ```
+  </Step>
+
+  <Step title="File Suffix">
+    Check for `.server.ryx` or `.client.ryx` suffixes.
+
+    ```
+    app/
+      dashboard/
+        analytics.server.ryx  // Server Component
+        chart.client.ryx      // Client Component
+    ```
+  </Step>
+
+  <Step title="Auto-Detection">
+    If no explicit directive or suffix:
+    - **Has hooks** (`useStore`, `useEffect`, etc.) → Client Component
+    - **Has async export** (`export async default`) → Server Component
+    - **Neither** → Shared component (isomorphic)
+  </Step>
+</Steps>
+
+**Detection logic**:
+
+```javascript
+let isServer = base.endsWith('.server') || /^\s*\/\/\s*@server/im.test(content);
+let isClient = base.endsWith('.client') || /^\s*\/\/\s*@client/im.test(content);
+
+if (!isServer && !isClient) {
+  const hasHooks = /use(Store|Effect|LayoutEffect|Context|Ref|Memo|Id|Transition)/.test(content);
+  const hasAsyncExport = /export\s+async\s+default|export\s+default\s+async/.test(content);
+
+  if (hasHooks) isClient = true;
+  else if (hasAsyncExport) isServer = true;
+}
+```
+
+**Location**: `webpack/utils/appRouterPlugin.mjs:92`
+
+### Dynamic Routes
+
+Use square brackets for dynamic segments:
+
+```
+app/
+  blog/
+    [slug]/
+      index.ryx       // Matches /blog/hello-world
+    [...rest]/
+      index.ryx       // Matches /blog/2024/march/post (catch-all)
+```
+
+**Route path transformation**:
+
+```javascript
+const routePath = routeSegment.replace(/\[(\.\.\.)?([^\]]+)\]/g, ':$1$2')
+// [slug] → :slug
+// [...rest] → :...rest
+```
+
+**Location**: `webpack/utils/appRouterPlugin.mjs:145`
+
+### Metadata Aggregation
+
+The plugin merges metadata from parent layouts to child pages:
+
+#### Static Metadata
+
+```javascript index.ryx
+export const Metatags = {
+  title: 'About Us',
+  description: 'Learn about our company',
+  keywords: ['company', 'about']
+}
+
+export default function About() {
+  return <div>About page</div>
+}
+```
+
+#### Dynamic Metadata
+
+```javascript [slug]/index.ryx
+export async function generateMetadata({ params, searchParams }) {
+  const post = await fetchPost(params.slug)
+  
+  return {
+    title: post.title,
+    description: post.excerpt,
+    image: post.coverImage
+  }
+}
+
+export default async function BlogPost({ params }) {
+  const post = await fetchPost(params.slug)
+  return <article>{post.content}</article>
+}
+```
+
+**Metadata resolution** (Server):
+
+```javascript
+let combinedMeta = {}
+for (const l of layouts) {
+  if (l.Metatags) combinedMeta = { ...combinedMeta, ...l.Metatags }
+  if (l.generateMetadata) {
+    const dynamic = await l.generateMetadata({ params, searchParams })
+    combinedMeta = { ...combinedMeta, ...dynamic }
+  }
+}
+useMetadata(combinedMeta)
+```
+
+**Location**: `webpack/utils/appRouterPlugin.mjs:366`
+
+### Generated Router Files
+
+The plugin generates three files:
+
+<Accordion title="app-router.js (Client)">
+  Client-side router with lazy-loaded components.
+
+  **Output**: `.ryunix/server/app/app-router.js`
+
+  ```javascript
+  import * as Layout_0 from '../../app/layout.ryx'
+  import * as Index_1 from '../../app/index.ryx'
+
+  const routes = [
+    {
+      path: '/',
+      component: (props) => <RouteWrapper 
+        layouts={[{ default: Layout_0.default, ... }]} 
+        index={{ default: Index_1.default, ... }} 
+        props={props} 
+      />
+    }
+  ]
+
+  export default function AppRouter() {
+    return <Ryunix.RouterProvider routes={routes} />
+  }
+  ```
+</Accordion>
+
+<Accordion title="app-router-server.js (Server)">
+  Server-side router with all components for SSR.
+
+  **Output**: `.ryunix/server/app/app-router-server.js`
+
+  Includes an exported `ssgRoutes` array for prerendering:
+
+  ```javascript
+  export const ssgRoutes = [
+    { path: '/', meta: {} },
+    { path: '/about', meta: {} },
+    { path: '/blog', meta: {} }
+  ]
+  ```
+</Accordion>
+
+<Accordion title="main.ryx (Entry)">
+  Client bundle entry point.
+
+  **Output**: `.ryunix/server/app/main.ryx`
+
+  ```javascript
+  import Ryunix from '@unsetsoft/ryunixjs'
+  import './globals.css'  // Auto-detected global styles
+  import AppRouter from './app-router.js'
+
+  if (typeof window !== 'undefined') { 
+    globalThis.Ryunix = Ryunix 
+  }
+  Ryunix.init(<AppRouter />)
+  ```
+</Accordion>
+
+**Location**: `webpack/utils/appRouterPlugin.mjs:294`
+
+### Route Wrapper Components
+
+The generated router includes sophisticated wrapper components:
+
+#### AsyncComponentRenderer
+
+Handles async Server Components on the client:
+
+```javascript
+const AsyncComponentRenderer = ({ Component, componentProps, ErrorFallback }) => {
+  const [content, setContent] = useStore(null)
+  useEffect(() => {
+    let active = true
+    const run = async () => {
+      try {
+        const res = await Component(componentProps)
+        if (active) setContent(<Ryunix.Fragment>{res}</Ryunix.Fragment>)
+      } catch(err) {
+        if (active) setContent(<ErrorFallback error={err} />)
+      }
+    }
+    run()
+    return () => { active = false }
+  }, [])
+  return content
+}
+```
+
+**Location**: `webpack/utils/appRouterPlugin.mjs:328`
+
+#### RouteWrapper
+
+Orchestrates layouts, boundaries, and metadata:
+
+```javascript
+const RouteWrapper = (props) => {
+  const isServer = typeof process !== 'undefined' && 
+                   String(process.env.RYUNIX_IS_SERVER) === 'true'
+  
+  if (isServer) return RouteWrapperServer(props)
+  return RouteWrapperClient(props)
+}
+```
+
+- **Server**: Awaits async metadata, directly renders components
+- **Client**: Uses `useEffect` for async metadata, wraps async components
+
+**Location**: `webpack/utils/appRouterPlugin.mjs:357`
+
+## Server-Side Rendering (SSR)
+
+### Development SSR
+
+During development, the `ssrDevHandler` middleware intercepts HTML requests:
+
+**Location**: `webpack/utils/ssrDevHandler.mjs:1`
+
+<Steps>
+  <Step title="Intercept Request">
+    Check if request accepts `text/html`
+  </Step>
+
+  <Step title="Load In-Memory Assets">
+    Access webpack's virtualized `index.html` from devServer compiler
+  </Step>
+
+  <Step title="Execute Server Bundle">
+    Load `.ryunix/server/app-router-server.bundle.mjs`
+
+    ```javascript
+    const { default: AppRouter } = await import(
+      path.join(process.cwd(), '.ryunix/server/app-router-server.bundle.mjs')
+    )
+    ```
+  </Step>
+
+  <Step title="Render to Stream">
+    Use Ryunix's `renderToReadableStream` API
+
+    ```javascript
+    const stream = await Ryunix.renderToReadableStream(<AppRouter />)
+    const html = await streamToString(stream)
+    ```
+  </Step>
+
+  <Step title="Inject CSS & Scripts">
+    Add development CSS `<link>` tags and client scripts
+  </Step>
+
+  <Step title="Send Response">
+    Serve pre-rendered HTML to browser
+  </Step>
+</Steps>
+
+**Benefits:**
+- Eliminates blank screens on page load
+- SEO-friendly during development
+- Matches production rendering behavior
+
+### Production SSR
+
+Production server can also implement SSR by loading the server bundle and calling `renderToString` or `renderToReadableStream` before serving HTML.
+
+## Static Site Generation (SSG)
+
+### App Router SSG
+
+For App Router projects, SSG is automatic in production builds:
+
+<Steps>
+  <Step title="Route Discovery">
+    AppRouterPlugin exports `ssgRoutes` array from server bundle
+  </Step>
+
+  <Step title="Prerendering">
+    `prerender.mjs` loads each route and renders to HTML
+
+    **Location**: `webpack/bin/prerender.mjs:1`
+  </Step>
+
+  <Step title="Metadata Injection">
+    Inserts `<title>`, `<meta>`, and `<link rel="canonical">` tags
+  </Step>
+
+  <Step title="HTML Output">
+    Saves HTML files to `.ryunix/static/` matching route structure:
+
+    ```
+    .ryunix/static/
+      index.html          # /
+      about/
+        index.html        # /about
+      blog/
+        index.html        # /blog
+    ```
+  </Step>
+
+  <Step title="SEO Manifests">
+    Generates `sitemap.xml` and `robots.txt`
+  </Step>
+</Steps>
+
+### Legacy SSG (RyunixRoutesPlugin)
+
+For projects using `pages/routes.ryx`, the RyunixRoutesPlugin handles SSG:
+
+**Location**: `webpack/utils/ssgPlugin.mjs:15`
+
+#### Route Definition
+
+```javascript routes.ryx
+import Home, { frontmatter as homeMeta } from './pages/home.mdx'
+import About, { frontmatter as aboutMeta } from './pages/about.mdx'
+
+export default [
+  {
+    path: '/',
+    component: Home,
+    meta: {
+      title: homeMeta?.title || 'Home',
+      description: homeMeta?.description || 'Welcome',
+      keywords: homeMeta?.keywords || []
+    }
+  },
+  {
+    path: '/about',
+    component: About,
+    meta: {
+      title: aboutMeta?.title || 'About',
+      description: aboutMeta?.description
+    }
+  }
+]
+```
+
+#### Frontmatter Extraction
+
+The plugin automatically extracts YAML frontmatter from MDX files:
+
+```mdx pages/home.mdx
+---
+title: Welcome to Our Site
+description: A modern web experience
+keywords: [web, modern, fast]
+author: John Doe
+---
+
+# Welcome
+
+Content goes here...
+```
+
+**Parsing logic**:
+
+```javascript
+parseFrontmatter(content) {
+  const yamlMatch = content.match(/^---\s*\n([\s\S]*?)\n---/)
+  if (!yamlMatch) return {}
+
+  const yamlContent = yamlMatch[1]
+  const frontmatter = {}
+
+  yamlContent.split('\n').forEach(line => {
+    const [key, value] = line.split(':')
+    frontmatter[key.trim()] = parseValue(value.trim())
+  })
+
+  return frontmatter
+}
+```
+
+**Location**: `webpack/utils/ssgPlugin.mjs:126`
+
+#### Template Literals
+
+Supports dynamic paths with fallbacks:
+
+```javascript
+{
+  path: `/docs/${docMeta?.slug}` || '/docs/default',
+  component: DocPage,
+  meta: {
+    title: docMeta?.title || 'Documentation'
+  }
+}
+```
+
+**Evaluation**:
+
+```javascript
+evaluatePathExpression(expression) {
+  const fallbackMatch = expression.match(
+    /([`"'][^`"']*[`"'])\s*\|\|\s*([`"'][^`"']*[`"'])/
+  )
+
+  if (fallbackMatch) {
+    const primary = this.evaluateSinglePath(fallbackMatch[1])
+    if (primary && !primary.includes('undefined')) return primary
+    return this.evaluateSinglePath(fallbackMatch[2])
+  }
+
+  return this.evaluateSinglePath(expression)
+}
+```
+
+**Location**: `webpack/utils/ssgPlugin.mjs:305`
+
+#### Route Manifest
+
+Generates `.ryunix/cache/ssg/routes.json`:
+
+```json
+[
+  {
+    "path": "/",
+    "meta": {
+      "title": "Home",
+      "description": "Welcome to our site",
+      "keywords": ["web", "modern"]
+    }
+  },
+  {
+    "path": "/about",
+    "meta": {
+      "title": "About Us"
+    }
+  }
+]
+```
+
+**Location**: `webpack/utils/ssgPlugin.mjs:51`
+
+## ApiRouterPlugin
+
+Compiles API endpoints from `/app/api` directory.
+
+**Location**: `webpack/utils/ApiRouterPlugin.mjs:10`
+
+### API Route Files
+
+Supported filenames:
+- `route.js`, `route.ts`, `route.ryx`
+- `router.js`, `router.ts`, `router.ryx`
+- `endpoint.js`, `endpoint.ts`
+
+### Directory Mapping
+
+```
+app/api/
+  route.js           → /api/
+  users/
+    route.js         → /api/users
+  posts/
+    [id]/
+      route.js       → /api/posts/:id
+```
+
+### Compilation
+
+Uses SWC to transpile TypeScript and JSX:
+
+```javascript
+const { code } = transformSync(content, {
+  jsc: {
+    parser: {
+      syntax: isTs ? 'typescript' : 'ecmascript',
+      jsx: true
+    },
+    target: 'es2022',
+    transform: {
+      react: {
+        pragma: 'Ryunix.createElement',
+        pragmaFrag: 'Ryunix.Fragment'
+      }
+    }
+  },
+  module: { type: 'es6' }
+})
+```
+
+Outputs as `.mjs` for native Node ESM support.
+
+**Location**: `webpack/utils/ApiRouterPlugin.mjs:93`
+
+### Example API Route
+
+```javascript app/api/users/route.js
+export async function GET(req, res) {
+  const users = await db.users.findMany()
+  return res.json(users)
+}
+
+export async function POST(req, res) {
+  const user = await db.users.create(req.body)
+  return res.status(201).json(user)
+}
+```
+
+**Compiled output**: `.ryunix/server/api/users/route.mjs`
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Use Server Components for Data Fetching">
+    ```javascript
+    // @server
+    export default async function ProductList() {
+      const products = await fetch('/api/products')
+      return (
+        <div>
+          {products.map(p => <ProductCard key={p.id} {...p} />)}
+        </div>
+      )
+    }
+    ```
+
+    Server Components can await data directly without useEffect.
+  </Accordion>
+
+  <Accordion title="Use Client Components for Interactivity">
+    ```javascript
+    // @client
+    export default function SearchBar() {
+      const [query, setQuery] = useStore('')
+      
+      return (
+        <input 
+          value={query} 
+          onChange={(e) => setQuery(e.target.value)} 
+        />
+      )
+    }
+    ```
+
+    Client Components have access to hooks and browser APIs.
+  </Accordion>
+
+  <Accordion title="Nest Layouts for Shared UI">
+    ```
+    app/
+      layout.ryx              # Root layout (navbar, footer)
+      dashboard/
+        layout.ryx            # Dashboard layout (sidebar)
+        index.ryx             # /dashboard
+        settings/
+          index.ryx           # /dashboard/settings
+    ```
+
+    Layouts automatically wrap all child routes.
+  </Accordion>
+
+  <Accordion title="Use Error Boundaries Strategically">
+    ```javascript error.ryx
+    export default function ErrorFallback({ error }) {
+      return (
+        <div>
+          <h1>Something went wrong</h1>
+          <p>{error.message}</p>
+          <button onClick={() => window.location.reload()}>
+            Retry
+          </button>
+        </div>
+      )
+    }
+    ```
+
+    Place error.ryx at appropriate levels to catch and handle errors gracefully.
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Server Actions" icon="server" href="/webpack/server-actions">
+    Call server functions from client components
+  </Card>
+  <Card title="Loaders" icon="code" href="/webpack/loaders">
+    Understand RSC and Server Actions loaders
+  </Card>
+</CardGroup>

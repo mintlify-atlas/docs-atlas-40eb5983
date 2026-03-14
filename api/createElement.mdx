@@ -1,0 +1,219 @@
+---
+title: 'createElement & Fragment'
+description: 'Create virtual DOM elements and fragments'
+---
+
+## createElement
+
+The `createElement` function creates a virtual DOM element with specified type, properties, and children. This is the core function used by JSX to create elements.
+
+```javascript
+import { createElement } from 'ryunixjs'
+```
+
+### Function Signature
+
+```javascript
+const createElement = (type, props, ...children)
+```
+
+<ParamField path="type" type="string | function" required>
+  The type of element to create. Can be:
+  - A string for HTML elements (e.g., `'div'`, `'span'`, `'p'`)
+  - A function component
+</ParamField>
+
+<ParamField path="props" type="object">
+  An object containing the properties or attributes for the element. Can include:
+  - Class names
+  - Styles
+  - Event handlers
+  - Custom attributes
+  - `children` property (alternative to spreading children)
+  
+  If `null` or `undefined`, defaults to an empty object.
+</ParamField>
+
+<ParamField path="children" type="...any">
+  Child elements or text content nested within the element. Can be:
+  - Strings or numbers (converted to text elements)
+  - Other virtual DOM elements
+  - Arrays of children (automatically flattened)
+  - `null`, `false`, `true`, or `undefined` (filtered out)
+</ParamField>
+
+<ResponseField name="element" type="object">
+  Returns a virtual DOM element object with:
+  - `type`: The element type
+  - `props`: Normalized properties including processed children
+</ResponseField>
+
+### Examples
+
+#### Creating HTML elements
+
+```javascript
+const element = createElement('div', { className: 'container' }, 'Hello World')
+```
+
+#### With JSX
+
+```jsx
+// This JSX:
+const element = <div className="container">Hello World</div>
+
+// Compiles to:
+const element = createElement('div', { className: 'container' }, 'Hello World')
+```
+
+#### With multiple children
+
+```javascript
+const element = createElement(
+  'div',
+  { className: 'wrapper' },
+  createElement('h1', null, 'Title'),
+  createElement('p', null, 'Description')
+)
+```
+
+#### Children in props
+
+```javascript
+const element = createElement('div', {
+  className: 'box',
+  children: ['Text content', createElement('span', null, 'Nested')]
+})
+```
+
+### Behavior Notes
+
+- **Text Normalization**: Adjacent primitive values (strings, numbers) are concatenated into a single text element
+- **Filtering**: `null`, `false`, `true`, and `undefined` values are filtered out from children
+- **Flattening**: Nested arrays in children are automatically flattened
+- **Children Source**: Children can come from either the `...children` rest parameter or `props.children`
+
+---
+
+## Fragment
+
+The `Fragment` component allows you to group multiple children without adding an extra DOM node.
+
+```javascript
+import { Fragment } from 'ryunixjs'
+```
+
+### Function Signature
+
+```javascript
+const Fragment = (props)
+```
+
+<ParamField path="props" type="object" required>
+  An object containing:
+  - `children`: Child elements to render (can be a single element or an array)
+</ParamField>
+
+<ResponseField name="fragment" type="object">
+  Returns a Ryunix fragment element of type `RYUNIX_TYPES.RYUNIX_FRAGMENT` containing the children.
+</ResponseField>
+
+### Examples
+
+#### Using Fragment with JSX
+
+```jsx
+import { Fragment } from 'ryunixjs'
+
+function List() {
+  return (
+    <Fragment>
+      <li>Item 1</li>
+      <li>Item 2</li>
+      <li>Item 3</li>
+    </Fragment>
+  )
+}
+```
+
+#### Using the short syntax
+
+```jsx
+function List() {
+  return (
+    <>
+      <li>Item 1</li>
+      <li>Item 2</li>
+      <li>Item 3</li>
+    </>
+  )
+}
+```
+
+#### Returning multiple elements
+
+```jsx
+function Header() {
+  return (
+    <>
+      <h1>Welcome</h1>
+      <p>This is the header section</p>
+    </>
+  )
+}
+```
+
+---
+
+## Additional Utilities
+
+### cloneElement
+
+Clone and return a new element using the original element as the starting point.
+
+```javascript
+const cloneElement = (element, props = {}, ...children)
+```
+
+<ParamField path="element" type="object" required>
+  The element to clone. Must be a valid Ryunix element.
+</ParamField>
+
+<ParamField path="props" type="object">
+  New props to merge with the original element's props.
+</ParamField>
+
+<ParamField path="children" type="...any">
+  New children to replace the original element's children. If not provided, uses original children.
+</ParamField>
+
+**Example:**
+
+```javascript
+const original = createElement('div', { className: 'box' }, 'Original')
+const cloned = cloneElement(original, { id: 'cloned' }, 'Cloned content')
+```
+
+### isValidElement
+
+Check if an object is a valid Ryunix element.
+
+```javascript
+const isValidElement = (object)
+```
+
+<ParamField path="object" type="any" required>
+  The object to check.
+</ParamField>
+
+<ResponseField name="valid" type="boolean">
+  Returns `true` if the object is a valid element with `type` and `props` properties.
+</ResponseField>
+
+**Example:**
+
+```javascript
+const element = createElement('div', null, 'Hello')
+console.log(isValidElement(element)) // true
+console.log(isValidElement('string')) // false
+```

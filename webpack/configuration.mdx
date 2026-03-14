@@ -1,0 +1,592 @@
+---
+title: 'Webpack Configuration'
+description: 'Customize webpack behavior through ryunix.config.js'
+---
+
+# Webpack Configuration
+
+RyunixJS provides extensive configuration options through `ryunix.config.js` to customize webpack behavior, build output, and development settings.
+
+## Configuration File
+
+Create `ryunix.config.js` in your project root:
+
+```javascript ryunix.config.js
+export default {
+  // Core settings
+  ssr: true,
+  production: false,
+  debug: false,
+  
+  // Build directories
+  rootDir: 'src',
+  buildDir: '.ryunix',
+  
+  // Server settings
+  port: 3000,
+  
+  // Webpack customization
+  webpack: {
+    // ... webpack options
+  }
+}
+```
+
+**Config loader location**: `webpack/utils/config.cjs:1`
+
+## Core Configuration Options
+
+### SSR & Production
+
+<ParamField path="ssr" type="boolean" default="false">
+  Enable Server-Side Rendering. When `true`, webpack generates both client and server bundles.
+</ParamField>
+
+<ParamField path="production" type="boolean" default="false">
+  Enable production mode. Activates minification, SSG prerendering, and optimizations.
+</ParamField>
+
+<ParamField path="debug" type="boolean" default="false">
+  Enable debug logging for plugins and loaders.
+</ParamField>
+
+### Directory Structure
+
+<ParamField path="rootDir" type="string" default="src">
+  Source code root directory.
+</ParamField>
+
+<ParamField path="buildDir" type="string" default=".ryunix">
+  Build output directory. Contains:
+  - `static/` - Client bundle
+  - `server/` - Server bundle and API routes
+  - `cache/` - Webpack and Babel cache
+</ParamField>
+
+### Server Settings
+
+<ParamField path="port" type="number" default="3000">
+  Development server port. Auto-increments if occupied.
+</ParamField>
+
+<ParamField path="proxy" type="object" default="{}">
+  Webpack Dev Server proxy configuration.
+
+  ```javascript
+  proxy: {
+    '/api': {
+      target: 'http://localhost:8080',
+      changeOrigin: true
+    }
+  }
+  ```
+</ParamField>
+
+## Webpack Options
+
+### Target
+
+<ParamField path="webpack.target" type="string" default="web">
+  Webpack compilation target for the client build.
+
+  **Options**: `'web'`, `'browserslist'`, etc.
+</ParamField>
+
+### Production Mode
+
+<ParamField path="webpack.production" type="boolean" default="false">
+  When `true`:
+  - Enables Terser minification
+  - Activates CSS minimization
+  - Disables source maps
+  - Triggers SSG prerendering
+</ParamField>
+
+```javascript
+optimization: {
+  minimize: config.webpack.production === true,
+  minimizer: config.webpack.production
+    ? [
+      new TerserPlugin({
+        parallel: true,
+        terserOptions: {
+          compress: {
+            dead_code: true,
+            passes: 2
+          }
+        }
+      }),
+      new CssMinimizerPlugin()
+    ]
+    : []
+}
+```
+
+**Location**: `webpack/webpack.config.mjs:141`
+
+### Experiments
+
+<ParamField path="webpack.experiments" type="object" default="{}">
+  Webpack experimental features.
+
+  ```javascript
+  webpack: {
+    experiments: {
+      lazyCompilation: true  // Compile chunks on-demand
+    }
+  }
+  ```
+</ParamField>
+
+**Location**: `webpack/webpack.config.mjs:109`
+
+### Module Rules
+
+<ParamField path="webpack.module.rules" type="array" default="[]">
+  Additional webpack rules to merge with defaults.
+
+  ```javascript
+  webpack: {
+    module: {
+      rules: [
+        {
+          test: /\.yaml$/,
+          type: 'json',
+          parser: {
+            parse: yaml.parse
+          }
+        }
+      ]
+    }
+  }
+  ```
+</ParamField>
+
+**Location**: `webpack/webpack.config.mjs:255`
+
+### Resolve
+
+#### Alias
+
+<ParamField path="webpack.resolve.alias" type="object" default="{}">
+  Path aliases for module resolution.
+
+  ```javascript
+  webpack: {
+    resolve: {
+      alias: {
+        '@components': './src/components',
+        '@utils': './src/utils',
+        '@styles': './src/styles'
+      }
+    }
+  }
+  ```
+
+  Aliases are automatically resolved relative to your project root.
+</ParamField>
+
+**Location**: `webpack/webpack.config.mjs:259`
+
+#### Extensions
+
+<ParamField path="webpack.resolve.extensions" type="array" default="[]">
+  Additional file extensions to resolve.
+
+  **Default extensions**: `.js`, `.jsx`, `.ryx`, `.mdx`, `.md`
+
+  ```javascript
+  webpack: {
+    resolve: {
+      extensions: ['.ts', '.tsx', '.json']
+    }
+  }
+  ```
+</ParamField>
+
+**Location**: `webpack/webpack.config.mjs:261`
+
+#### Fallback
+
+<ParamField path="webpack.resolve.fallback" type="object" default="{}">
+  Polyfills for Node.js core modules in browser builds.
+
+  ```javascript
+  webpack: {
+    resolve: {
+      fallback: {
+        "crypto": require.resolve("crypto-browserify"),
+        "stream": require.resolve("stream-browserify")
+      }
+    }
+  }
+  ```
+</ParamField>
+
+**Location**: `webpack/webpack.config.mjs:269`
+
+### Externals
+
+<ParamField path="webpack.externals" type="array" default="[]">
+  Modules to exclude from bundles.
+
+  **Default externals**: `ryunix: '@unsetsoft/ryunixjs'`
+
+  ```javascript
+  webpack: {
+    externals: [
+      'fsevents',
+      '@swc/core'
+    ]
+  }
+  ```
+</ParamField>
+
+**Location**: `webpack/webpack.config.mjs:274`
+
+### Plugins
+
+<ParamField path="webpack.plugins" type="array" default="[]">
+  Additional webpack plugins for client build only.
+
+  ```javascript
+  import { BundleAnalyzerPlugin } from 'webpack-bundle-analyzer'
+
+  export default {
+    webpack: {
+      plugins: [
+        new BundleAnalyzerPlugin({
+          analyzerMode: 'static',
+          openAnalyzer: false
+        })
+      ]
+    }
+  }
+  ```
+</ParamField>
+
+<Warning>
+  Plugins are only applied to the **client** build. Server build uses minimal plugins.
+</Warning>
+
+**Location**: `webpack/webpack.config.mjs:358`
+
+### Dev Server
+
+<ParamField path="webpack.devServer.allowedHosts" type="array" default="['all']">
+  Allowed hosts for webpack-dev-server.
+
+  ```javascript
+  webpack: {
+    devServer: {
+      allowedHosts: ['localhost', '.example.com']
+    }
+  }
+  ```
+</ParamField>
+
+**Location**: `webpack/webpack.config.mjs:393`
+
+## MDX Configuration
+
+<ParamField path="mdx" type="boolean" default="false">
+  Enable MDX file support.
+
+  When enabled, adds MDX loader with:
+  - `remarkGfm` - GitHub Flavored Markdown
+  - `remarkFrontmatter` - YAML frontmatter parsing
+  - `rehypeHighlight` - Code syntax highlighting
+
+  ```javascript
+  export default {
+    mdx: true
+  }
+  ```
+</ParamField>
+
+**Location**: `webpack/webpack.config.mjs:177`
+
+## SEO & HTML (Legacy)
+
+### SEO Settings
+
+<ParamField path="legacy.seo" type="object">
+  HTML metadata configuration.
+
+  ```javascript
+  legacy: {
+    seo: {
+      title: 'My Ryunix App',
+      pageLang: 'en',
+      meta: {
+        description: 'A fast, modern web application',
+        keywords: 'ryunix, react, ssr',
+        author: 'Your Name'
+      }
+    }
+  }
+  ```
+</ParamField>
+
+**Location**: `webpack/webpack.config.mjs:304`
+
+### HTML Template
+
+<ParamField path="legacy.template" type="string" default="null">
+  Custom HTML template path.
+
+  ```javascript
+  legacy: {
+    template: './public/index.html'
+  }
+  ```
+
+  If not specified, uses built-in template at `webpack/template/index.html`.
+</ParamField>
+
+**Location**: `webpack/webpack.config.mjs:310`
+
+### Favicon
+
+<ParamField path="favicon" type="string|boolean" default="null">
+  Favicon configuration.
+
+  ```javascript
+  favicon: './public/favicon.png'  // Custom path
+  favicon: true                     // Use /public/favicon.png
+  favicon: false                    // No favicon
+  ```
+</ParamField>
+
+**Location**: `webpack/webpack.config.mjs:306`
+
+## SSG Configuration (Legacy)
+
+<ParamField path="legacy.ssg.prerender" type="array" default="[]">
+  Routes to prerender as static HTML.
+
+  <Warning>
+    This is the legacy SSG system. For App Router, routes are auto-discovered.
+  </Warning>
+
+  ```javascript
+  legacy: {
+    ssg: {
+      prerender: [
+        { path: '/', meta: { title: 'Home' } },
+        { path: '/about', meta: { title: 'About' } }
+      ]
+    }
+  }
+  ```
+</ParamField>
+
+**SSG trigger condition**:
+
+```javascript
+const enableServerDualCompiler = 
+  config.ssr || 
+  (config.webpack.production && config.legacy.ssg?.prerender?.length > 0)
+```
+
+**Location**: `webpack/webpack.config.mjs:594`
+
+## ESLint Configuration
+
+<ParamField path="eslint.files" type="array" default="['**/*.ryx']">
+  File patterns for ESLint to check.
+
+  ```javascript
+  eslint: {
+    files: ['**/*.ryx', '**/*.js', '**/*.jsx']
+  }
+  ```
+</ParamField>
+
+**ESLint config location**: `webpack/eslint.config.mjs:1`
+
+## Environment Variables
+
+### .env File
+
+RyunixJS automatically loads `.env` from your project root:
+
+```bash .env
+RYUNIX_APP_API_URL=https://api.example.com
+RYUNIX_APP_FEATURE_FLAG=true
+```
+
+Variables prefixed with `RYUNIX_APP_` are injected into your app:
+
+```javascript
+// Access in your app
+const apiUrl = process.env.RYUNIX_APP_API_URL
+```
+
+**Implementation**:
+
+```javascript
+new Dotenv({
+  path: resolveApp(dir, '.env'),
+  prefix: 'ryunix.env.RYUNIX_APP_',
+  systemvars: false,
+  ignoreStub: true
+})
+```
+
+**Location**: `webpack/webpack.config.mjs:286`
+
+### Custom Environment
+
+<ParamField path="env" type="object" default="{}">
+  Custom environment variables injected via `ryunix.config.env`.
+
+  ```javascript
+  export default {
+    env: {
+      API_VERSION: 'v2',
+      FEATURE_X: true
+    }
+  }
+  ```
+
+  Access in code:
+
+  ```javascript
+  if (ryunix.config.env.FEATURE_X) {
+    // Feature X code
+  }
+  ```
+</ParamField>
+
+**Location**: `webpack/webpack.config.mjs:294`
+
+## PostCSS Configuration
+
+Create `postcss.config.js` in your project root:
+
+```javascript postcss.config.js
+module.exports = {
+  plugins: {
+    'tailwindcss': {},
+    'autoprefixer': {},
+    'postcss-nested': {}
+  }
+}
+```
+
+RyunixJS automatically loads and applies your PostCSS plugins.
+
+**Plugin resolution**:
+
+```javascript
+const resolvePostcssPlugins = () => {
+  const configPath = resolveApp(dir, 'postcss.config.js')
+  if (!fs.existsSync(configPath)) return []
+  
+  const config = projectRequire(configPath)
+  const plugins = config.plugins || {}
+  
+  return Object.entries(plugins).map(([name, opts]) => {
+    const pluginFn = projectRequire(name)  // Resolve from project node_modules
+    const fn = pluginFn.default || pluginFn
+    return opts ? fn(opts) : fn()
+  })
+}
+```
+
+**Location**: `webpack/webpack.config.mjs:82`
+
+## Complete Configuration Example
+
+<CodeGroup>
+```javascript Full Config
+export default {
+  // Core
+  ssr: true,
+  production: process.env.NODE_ENV === 'production',
+  debug: false,
+  mdx: true,
+  
+  // Directories
+  rootDir: 'src',
+  buildDir: '.ryunix',
+  
+  // Server
+  port: 3000,
+  proxy: {
+    '/api': 'http://localhost:8080'
+  },
+  
+  // Environment
+  env: {
+    API_URL: process.env.API_URL,
+    FEATURE_NEW_UI: true
+  },
+  
+  // Webpack
+  webpack: {
+    production: process.env.NODE_ENV === 'production',
+    experiments: {
+      lazyCompilation: true
+    },
+    resolve: {
+      alias: {
+        '@components': './src/components',
+        '@lib': './src/lib'
+      },
+      extensions: ['.ts', '.tsx']
+    },
+    module: {
+      rules: [
+        {
+          test: /\.svg$/,
+          use: ['@svgr/webpack']
+        }
+      ]
+    },
+    devServer: {
+      allowedHosts: ['localhost', '.myapp.dev']
+    }
+  },
+  
+  // SEO (Legacy)
+  legacy: {
+    seo: {
+      title: 'My Application',
+      pageLang: 'en',
+      meta: {
+        description: 'Built with RyunixJS',
+        keywords: 'ryunix, ssr, performance'
+      }
+    }
+  },
+  
+  // Favicon
+  favicon: './public/favicon.png',
+  
+  // ESLint
+  eslint: {
+    files: ['**/*.ryx', '**/*.js']
+  }
+}
+```
+
+```javascript Minimal Config
+export default {
+  ssr: true,
+  port: 3000
+}
+```
+</CodeGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="CLI Commands" icon="terminal" href="/webpack/cli-server">
+    Learn about dev and build commands
+  </Card>
+  <Card title="Routing" icon="route" href="/webpack/routing-ssr-ssg">
+    Configure file-system routing
+  </Card>
+</CardGroup>

@@ -1,0 +1,212 @@
+---
+title: Installation
+description: Get started with RyunixJS using npm, yarn, or pnpm
+---
+
+# Installation
+
+There are two ways to get started with RyunixJS: using the official CLI for a complete project setup, or installing the core library manually for custom integrations.
+
+## Recommended: Using the CLI
+
+The fastest and recommended way to start a new RyunixJS project is using **@unsetsoft/cra** (Create Ryunix App), the official scaffolding tool.
+
+<Steps>
+  <Step title="Run the CLI">
+    Open your terminal and run the following command:
+
+    <CodeGroup>
+      ```bash npm
+      npx @unsetsoft/cra@latest my-ryunix-app
+      ```
+
+      ```bash yarn
+      yarn create @unsetsoft/cra my-ryunix-app
+      ```
+
+      ```bash pnpm
+      pnpm create @unsetsoft/cra my-ryunix-app
+      ```
+    </CodeGroup>
+
+    <Note>
+      You can also run `npx @unsetsoft/cra@latest` without a project name to enter the interactive setup.
+    </Note>
+  </Step>
+
+  <Step title="Configure Your Project">
+    The CLI will guide you through several choices to customize your project:
+
+    - **Project Name**: The directory name for your new application
+    - **Release Channel**: Choose between Latest (stable) or Canary (cutting edge)
+    - **Tailwind CSS**: Optional automatic initialization and configuration
+    - **ESLint**: Pre-configured linting rules optimized for Ryunix
+    - **VS Code Integration**: Automatic configuration for the Ryunix VS Code Extension
+  </Step>
+
+  <Step title="Navigate to Your Project">
+    Once the CLI finishes, navigate to your new project directory:
+
+    ```bash
+    cd my-ryunix-app
+    ```
+  </Step>
+
+  <Step title="Start the Development Server">
+    Launch the development server to see your app in action:
+
+    <CodeGroup>
+      ```bash npm
+      npm run dev
+      ```
+
+      ```bash yarn
+      yarn dev
+      ```
+
+      ```bash pnpm
+      pnpm dev
+      ```
+    </CodeGroup>
+
+    Your app will be running at `http://localhost:3000` (or another port if 3000 is in use).
+  </Step>
+</Steps>
+
+## CLI Flags
+
+For more control over project initialization, you can use command-line flags:
+
+| Flag | Description |
+| :--- | :--- |
+| `-v, --version` | Output the current version of the CLI |
+| `-h, --help` | Display the help message |
+| `--canary` | Use the Canary channel for Ryunix dependencies |
+| `--latest` | Use the Latest channel for Ryunix dependencies (default) |
+| `--tailwind` | Initialize with Tailwind CSS configuration |
+| `--eslint` | Initialize with ESLint configuration |
+| `--vscode` | Add VS Code settings for Ryunix extension |
+
+### Example with Flags
+
+```bash
+npx @unsetsoft/cra@latest my-app --canary --tailwind --eslint
+```
+
+## Manual Installation
+
+If you prefer to set up RyunixJS manually or integrate it into an existing project, you can install the core package directly.
+
+<Warning>
+  Manual installation requires you to configure build tools (Webpack, Vite, etc.) yourself. The CLI method is recommended for most users.
+</Warning>
+
+### Install the Core Package
+
+<CodeGroup>
+  ```bash npm
+  npm install @unsetsoft/ryunixjs
+  ```
+
+  ```bash yarn
+  yarn add @unsetsoft/ryunixjs
+  ```
+
+  ```bash pnpm
+  pnpm add @unsetsoft/ryunixjs
+  ```
+</CodeGroup>
+
+### JSX Configuration
+
+RyunixJS supports JSX out of the box. Configure your build tool to use the Ryunix JSX runtime:
+
+#### TypeScript/Babel Configuration
+
+Add the following to your `tsconfig.json` or `babel.config.js`:
+
+```json tsconfig.json
+{
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "jsxImportSource": "@unsetsoft/ryunixjs"
+  }
+}
+```
+
+```javascript babel.config.js
+module.exports = {
+  presets: [
+    ['@babel/preset-react', {
+      runtime: 'automatic',
+      importSource: '@unsetsoft/ryunixjs'
+    }]
+  ]
+}
+```
+
+### Basic Setup
+
+Create a simple application entry point:
+
+```javascript main.js
+import { render } from '@unsetsoft/ryunixjs'
+import App from './App'
+
+render(<App />, document.getElementById('root'))
+```
+
+```jsx App.jsx
+import { useStore } from '@unsetsoft/ryunixjs'
+
+export default function App() {
+  const [count, setCount] = useStore(0)
+
+  return (
+    <div>
+      <h1>Count: {count}</h1>
+      <button onClick={() => setCount(count + 1)}>
+        Increment
+      </button>
+    </div>
+  )
+}
+```
+
+## System Requirements
+
+RyunixJS has minimal system requirements:
+
+- **Node.js**: Version 20, 22, or 24 (or higher)
+- **Package Manager**: npm, yarn, or pnpm 8+
+
+<Note>
+  RyunixJS is optimized for modern JavaScript environments. Ensure your build tools are configured to target ES6+ for the best experience.
+</Note>
+
+## What's Included?
+
+Every project scaffolded with the CLI comes pre-configured with:
+
+<CardGroup cols={2}>
+  <Card title="Webpack Build System" icon="box">
+    Optimized bundles with code splitting and hot module replacement
+  </Card>
+  <Card title="SSR Ready" icon="server">
+    Foundations for Server-Side Rendering with hybrid rendering support
+  </Card>
+  <Card title="Modular Structure" icon="folder-tree">
+    Clean directory layout with `app/`, `assets/`, and `styles/` folders
+  </Card>
+  <Card title="Configuration File" icon="file-code">
+    Ready-to-use `ryunix.config.js` for project customization
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+Now that you have RyunixJS installed, let's build your first application!
+
+<Card title="Quickstart Guide" icon="rocket" href="/quickstart">
+  Follow our quickstart guide to create your first RyunixJS application
+</Card>

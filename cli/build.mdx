@@ -1,0 +1,142 @@
+---
+title: ryunix build
+description: Build your Ryunix application for production
+---
+
+## Usage
+
+```bash
+ryunix build
+```
+
+Executes the dual compiler to build both client and server bundles for production deployment.
+
+## Description
+
+The `build` command creates optimized production bundles by:
+
+- Running the **Dual Compiler** (Client + Server targets)
+- Cleaning previous build artifacts (preserves cache for speed)
+- Generating client bundle in `.ryunix/static/`
+- Generating server bundle in `.ryunix/server/`
+- Triggering **SSG Prerendering** if `webpack.production: true`
+- Compiling API routes to `.ryunix/server/api/`
+
+## Build Output
+
+The build process generates the following structure:
+
+```
+.ryunix/
+├── cache/          # Build cache (preserved between builds)
+├── static/         # Client-side bundle
+│   ├── index.html
+│   ├── js/
+│   ├── css/
+│   └── assets/
+└── server/         # Server-side bundle
+    ├── app/
+    ├── api/        # API route handlers
+    └── app-router-server.bundle.mjs
+```
+
+## Build Process
+
+### 1. Clean Phase
+
+Clears the following directories before building:
+- `.ryunix/static/` (entire directory)
+- `.ryunix/server/app/` 
+- `.ryunix/server/app-router-server.bundle.mjs`
+
+**Note:** `.ryunix/cache/` is preserved to maintain build speed, and `.ryunix/server/api/` is managed incrementally by the ApiRouterPlugin.
+
+### 2. Compilation Phase
+
+Runs webpack in production mode with both client and server configurations.
+
+### 3. Prerender Phase (SSG)
+
+If `production: true` is set in your configuration, the build automatically prerenders static pages.
+
+### 4. API Routes Detection
+
+The build process scans for API routes and displays them:
+
+```
+○  API routes (3):
+   ✔ /api/
+   ✔ /api/users
+   ✔ /api/posts
+```
+
+## Example Output
+
+```bash
+ryunix build
+```
+
+```
+○  API routes (3):
+   ✔ /api/
+   ✔ /api/users  
+   ✔ /api/posts
+
+✔ Compilation successful! 🎉
+Done in 8.3s
+```
+
+## Error Handling
+
+If compilation fails, detailed error messages are displayed:
+
+```
+✘ Error during compilation:
+
+ERROR in ./src/App.ryx
+Module not found: Error: Can't resolve './Component'
+```
+
+The process exits with code `1` on failure.
+
+## Environment
+
+Sets `RYUNIX_MODE=production` automatically.
+
+## Configuration
+
+The build respects the following settings from `ryunix.config.js`:
+
+- `buildDir` - Output directory (default: `.ryunix`)
+- `webpack.production` - Enable production optimizations and SSG
+- `webpack.plugins` - Custom webpack plugins
+- `webpack.resolve.alias` - Module aliases
+- `webpack.externals` - External dependencies
+
+## Performance Tips
+
+### Build Cache
+
+The `.ryunix/cache/` directory significantly speeds up incremental builds. Keep it unless you're experiencing build issues.
+
+### Clearing Cache
+
+To force a clean build, remove the cache directory:
+
+```bash
+rm -rf .ryunix/cache
+ryunix build
+```
+
+## Next Steps
+
+After building, start the production server:
+
+```bash
+ryunix start
+```
+
+## Related Commands
+
+- [`ryunix dev`](/cli/dev) - Start development server
+- [`ryunix start`](/cli/start) - Start production server

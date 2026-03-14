@@ -1,0 +1,328 @@
+---
+title: createPortal
+description: Render children into a different DOM container outside the parent hierarchy
+---
+
+## Overview
+
+`createPortal` renders children into a different DOM container, outside the normal parent hierarchy. This is useful for modals, tooltips, dropdowns, and other UI elements that need to visually break out of their parent container while maintaining React context.
+
+## Import
+
+```javascript
+import { createPortal } from 'ryunixjs'
+```
+
+## API
+
+### createPortal()
+
+```javascript
+createPortal(children, container)
+```
+
+<ParamField path="children" type="ReactNode" required>
+  The element(s) to render into the portal. Can be any valid RyunixJS element.
+</ParamField>
+
+<ParamField path="container" type="HTMLElement" required>
+  The DOM element to render the children into. Must be a valid DOM node (typically obtained via `document.getElementById()` or similar).
+</ParamField>
+
+**Returns:** A portal element that will be rendered into the specified container.
+
+## Usage
+
+### Basic Modal
+
+```javascript
+import { createPortal } from 'ryunixjs'
+import { useStore } from 'ryunixjs'
+
+function Modal({ children, onClose }) {
+  return createPortal(
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+        {children}
+        <button onClick={onClose}>Close</button>
+      </div>
+    </div>,
+    document.getElementById('modal-root')
+  )
+}
+
+function App() {
+  const [isOpen, setIsOpen] = useStore(false)
+  
+  return (
+    <div>
+      <button onClick={() => setIsOpen(true)}>Open Modal</button>
+      
+      {isOpen && (
+        <Modal onClose={() => setIsOpen(false)}>
+          <h2>Modal Content</h2>
+          <p>This is rendered in a portal!</p>
+        </Modal>
+      )}
+    </div>
+  )
+}
+```
+
+### HTML Setup
+
+Make sure you have a target container in your HTML:
+
+```html
+<!DOCTYPE html>
+<html>
+<body>
+  <div id="root"></div>
+  <div id="modal-root"></div>
+  <script src="/app.js"></script>
+</body>
+</html>
+```
+
+### Tooltip Component
+
+```javascript
+import { createPortal } from 'ryunixjs'
+import { useStore, useEffect } from 'ryunixjs'
+
+function Tooltip({ children, text }) {
+  const [isVisible, setIsVisible] = useStore(false)
+  const [position, setPosition] = useStore({ x: 0, y: 0 })
+  
+  const handleMouseEnter = (e) => {
+    setPosition({ x: e.clientX, y: e.clientY })
+    setIsVisible(true)
+  }
+  
+  return (
+    <div
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={() => setIsVisible(false)}
+    >
+      {children}
+      {isVisible && createPortal(
+        <div 
+          className="tooltip"
+          style={{
+            position: 'fixed',
+            left: `${position.x}px`,
+            top: `${position.y}px`
+          }}
+        >
+          {text}
+        </div>,
+        document.body
+      )}
+    </div>
+  )
+}
+
+// Usage
+function App() {
+  return (
+    <Tooltip text="Click to learn more">
+      <button>Hover me</button>
+    </Tooltip>
+  )
+}
+```
+
+### Dropdown Menu
+
+```javascript
+import { createPortal } from 'ryunixjs'
+import { useStore, useEffect } from 'ryunixjs'
+
+function Dropdown({ trigger, items }) {
+  const [isOpen, setIsOpen] = useStore(false)
+  const [position, setPosition] = useStore({ x: 0, y: 0 })
+  
+  const handleClick = (e) => {
+    const rect = e.target.getBoundingClientRect()
+    setPosition({ x: rect.left, y: rect.bottom })
+    setIsOpen(!isOpen)
+  }
+  
+  // Close on outside click
+  useEffect(() => {
+    if (isOpen) {
+      const handleOutsideClick = () => setIsOpen(false)
+      document.addEventListener('click', handleOutsideClick)
+      return () => document.removeEventListener('click', handleOutsideClick)
+    }
+  }, [isOpen])
+  
+  return (
+    <div>
+      <div onClick={handleClick}>
+        {trigger}
+      </div>
+      
+      {isOpen && createPortal(
+        <div 
+          className="dropdown-menu"
+          style={{
+            position: 'fixed',
+            left: `${position.x}px`,
+            top: `${position.y}px`
+          }}
+        >
+          {items.map((item, i) => (
+            <div key={i} className="dropdown-item" onClick={item.onClick}>
+              {item.label}
+            </div>
+          ))}
+        </div>,
+        document.body
+      )}
+    </div>
+  )
+}
+
+// Usage
+function App() {
+  return (
+    <Dropdown
+      trigger={<button>Menu</button>}
+      items={[
+        { label: 'Profile', onClick: () => console.log('Profile') },
+        { label: 'Settings', onClick: () => console.log('Settings') },
+        { label: 'Logout', onClick: () => console.log('Logout') }
+      ]}
+    />
+  )
+}
+```
+
+### Notification System
+
+```javascript
+import { createPortal } from 'ryunixjs'
+import { useStore } from 'ryunixjs'
+
+let notificationId = 0
+
+function NotificationContainer() {
+  const [notifications, setNotifications] = useStore([])
+  
+  // Expose global function to add notifications
+  window.notify = (message, type = 'info') => {
+    const id = notificationId++
+    setNotifications([...notifications, { id, message, type }])
+    
+    setTimeout(() => {
+      setNotifications(notifications.filter(n => n.id !== id))
+    }, 3000)
+  }
+  
+  return createPortal(
+    <div className="notification-container">
+      {notifications.map(notif => (
+        <div key={notif.id} className={`notification ${notif.type}`}>
+          {notif.message}
+        </div>
+      ))}
+    </div>,
+    document.getElementById('notification-root')
+  )
+}
+
+// Usage
+function App() {
+  return (
+    <div>
+      <button onClick={() => window.notify('Success!', 'success')}>
+        Show Notification
+      </button>
+      <NotificationContainer />
+    </div>
+  )
+}
+```
+
+### Modal with Context
+
+Portals maintain the React context from their parent component:
+
+```javascript
+import { createPortal } from 'ryunixjs'
+import { createContext, useContext, useStore } from 'ryunixjs'
+
+const ThemeContext = createContext('light')
+
+function ThemedModal({ children }) {
+  const theme = useContext(ThemeContext)
+  
+  return createPortal(
+    <div className={`modal modal-${theme}`}>
+      {children}
+    </div>,
+    document.getElementById('modal-root')
+  )
+}
+
+function App() {
+  const [theme, setTheme] = useStore('light')
+  
+  return (
+    <ThemeContext.Provider value={theme}>
+      <div>
+        <button onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}>
+          Toggle Theme
+        </button>
+        
+        <ThemedModal>
+          <p>This modal inherits the theme from context!</p>
+        </ThemedModal>
+      </div>
+    </ThemeContext.Provider>
+  )
+}
+```
+
+## Error Handling
+
+In development mode, `createPortal` logs an error and returns `null` if the container is not a valid DOM element:
+
+```javascript
+// This will log an error in development
+const portal = createPortal(
+  <div>Content</div>,
+  null // Invalid container
+)
+// Returns null instead of crashing
+```
+
+## Implementation Details
+
+- Returns a special object with `type: RYUNIX_PORTAL` marker
+- Children are stored as an array in `props.children`
+- Container reference is stored in `containerInfo`
+- Marked with `_isPortal: true` for reconciler detection
+- Reconciler handles rendering into the target container
+- Event bubbling follows React tree, not DOM tree
+
+## Use Cases
+
+### When to Use Portals
+
+- **Modals and dialogs**: Break out of parent overflow/z-index constraints
+- **Tooltips and popovers**: Position relative to viewport, not parent
+- **Dropdowns**: Avoid being clipped by parent containers
+- **Notifications/toasts**: Render at top level for consistent positioning
+- **Context menus**: Position anywhere on screen
+
+### When NOT to Use Portals
+
+- Regular content that fits in the normal document flow
+- When you just need to change z-index (use CSS instead)
+- Server-side rendering without a target container
+
+## Performance
+
+Portals are lightweight and have minimal performance overhead. The reconciler treats them like any other element, just rendering to a different DOM location.

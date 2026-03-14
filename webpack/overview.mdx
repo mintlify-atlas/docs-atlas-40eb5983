@@ -1,0 +1,260 @@
+---
+title: 'Webpack Preset Overview'
+description: 'Complete overview of the RyunixJS Webpack configuration system'
+---
+
+# Webpack Preset Overview
+
+The `@unsetsoft/ryunix-presets` package provides a production-ready Webpack configuration optimized for full-stack RyunixJS applications with SSR, SSG, and Island Architecture support.
+
+## Dual Compiler Architecture
+
+RyunixJS uses Webpack's multi-compiler mode to build both client and server targets simultaneously when SSR is enabled.
+
+### Client Configuration
+
+- **Target**: `web` (browser environment)
+- **Output**: `.ryunix/static/` directory
+- **Entry**: `.ryunix/server/app/main.ryx`
+- **Features**:
+  - Hot Module Replacement (HMR) via webpack-dev-server
+  - Code splitting with intelligent chunk optimization
+  - CSS extraction using `MiniCssExtractPlugin`
+  - Terser minification for production
+  - Asset optimization (images, fonts, media)
+
+### Server Configuration
+
+- **Target**: `node` (Node.js environment)
+- **Output**: `.ryunix/server/app-router-server.bundle.mjs`
+- **Module Format**: Native ES Modules (`experiments.outputModule: true`)
+- **Features**:
+  - SSR rendering capabilities
+  - No CSS emission (handled by client build)
+  - Unminified for faster builds and debugging
+  - API route compilation
+
+## Key Features
+
+### File System Cache
+
+Webpack uses a persistent filesystem cache for faster rebuilds:
+
+```javascript
+cache: {
+  type: 'filesystem',
+  cacheDirectory: '.ryunix/cache/webpack',
+  store: 'pack'
+}
+```
+
+### Code Splitting Strategy
+
+Optimized chunk splitting for performance:
+
+<CodeGroup>
+```javascript Framework Bundle
+{
+  framework: {
+    test: /[\\/]node_modules[\\/](@unsetsoft[\\/]ryunixjs)[\\/]/,
+    name: 'framework',
+    priority: 40,
+    enforce: true
+  }
+}
+```
+
+```javascript Vendor Bundle
+{
+  vendor: {
+    test: /[\\/]node_modules[\\/]/,
+    name: 'vendors',
+    priority: 20
+  }
+}
+```
+
+```javascript Common Bundle
+{
+  common: {
+    name: 'commons',
+    minChunks: 2,
+    priority: 10,
+    reuseExistingChunk: true
+  }
+}
+```
+</CodeGroup>
+
+### Custom Webpack Plugins
+
+RyunixJS includes three powerful custom plugins:
+
+#### AppRouterPlugin
+
+Scans the `/app` directory and generates routing configuration:
+
+- Auto-detects Server vs Client Components
+- Maps `layout.ryx`, `index.ryx`, `error.ryx`, `loading.ryx`
+- Generates dual router files for client and server
+- Aggregates metadata for SEO
+
+**Location**: `webpack/utils/appRouterPlugin.mjs:4`
+
+#### ApiRouterPlugin
+
+Compiles API endpoints from `/app/api`:
+
+- Supports `route.js`, `endpoint.js`, `router.js` files
+- Transpiles TypeScript and JSX
+- Outputs native ES Modules (`.mjs`)
+- Incremental compilation
+
+**Location**: `webpack/utils/ApiRouterPlugin.mjs:10`
+
+#### RyunixRoutesPlugin
+
+Handles Static Site Generation (SSG):
+
+- Extracts routes from `routes.ryx` (legacy)
+- Parses MDX frontmatter for metadata
+- Generates `routes.json` manifest
+- Supports template literals in paths
+
+**Location**: `webpack/utils/ssgPlugin.mjs:15`
+
+## Custom Loaders
+
+### RSC Loader (Island Architecture)
+
+The `ryunix-rsc-loader.mjs` enables Island Architecture by:
+
+1. Detecting Client Components via:
+   - `// @client` directive
+   - Hook usage (`useStore`, `useEffect`, etc.)
+2. Hashing component file paths (MD5)
+3. Injecting runtime code to register islands:
+
+```javascript
+window.__RYUNIX_ISLANDS__ = window.__RYUNIX_ISLANDS__ || {};
+window.__RYUNIX_ISLANDS__["hash"] = Component;
+```
+
+**Location**: `webpack/loaders/ryunix-rsc-loader.mjs:1`
+
+### Server Actions Loader
+
+Transforms `// @server` files using Babel AST:
+
+- **Client Build**: Replaces functions with proxies that POST to `/_ryunix/action`
+- **Server Build**: Registers functions in `globalThis.__RYUNIX_SERVER_ACTIONS__`
+
+**Location**: `webpack/loaders/ryunix-server-action-loader.mjs:4`
+
+## Module Resolution
+
+Supported file extensions:
+
+- `.js`, `.jsx` - JavaScript files
+- `.ryx` - Ryunix component files
+- `.mdx`, `.md` - Markdown with JSX
+- `.ts`, `.tsx` - TypeScript (via Babel)
+
+## Asset Handling
+
+<CodeGroup>
+```javascript Images
+{
+  test: /\.(jpg|jpeg|png|gif|svg|ico)$/,
+  type: 'asset/resource',
+  generator: {
+    filename: 'images/[name].[hash][ext]'
+  }
+}
+```
+
+```javascript Media Files
+{
+  test: /\.(mp3|mp4|pdf)$/,
+  type: 'asset/resource',
+  generator: {
+    filename: 'media/[name].[hash][ext]'
+  }
+}
+```
+</CodeGroup>
+
+## PostCSS Integration
+
+RyunixJS automatically loads `postcss.config.js` from your project:
+
+```javascript
+// postcss.config.js
+module.exports = {
+  plugins: {
+    tailwindcss: {},
+    autoprefixer: {}
+  }
+}
+```
+
+Plugins are resolved from your project's `node_modules`, ensuring compatibility with pnpm workspaces.
+
+## Environment Variables
+
+The preset injects several environment variables:
+
+```javascript
+'ryunix.config.env': JSON.stringify(config.env)
+'process.env.RYUNIX_SSR': JSON.stringify(config.ssr)
+'process.env.RYUNIX_DEBUG': JSON.stringify(config.debug)
+'process.env.RYUNIX_IS_SERVER': JSON.stringify(isServer)
+```
+
+## MDX Support
+
+When `mdx: true` in config:
+
+```javascript
+{
+  loader: '@mdx-js/loader',
+  options: {
+    jsxImportSource: '@unsetsoft/ryunixjs',
+    remarkPlugins: [remarkGfm, remarkFrontmatter],
+    rehypePlugins: [rehypeHighlight]
+  }
+}
+```
+
+## Performance Optimizations
+
+- **Thread Loader**: Parallel processing for JS/JSX files
+- **Lazy Compilation**: Optional on-demand compilation
+- **Deterministic Module IDs**: Better long-term caching
+- **Runtime Chunk**: Single runtime shared across chunks
+- **Source Maps**: Disabled in production, enabled in dev
+
+## Configuration Reference
+
+Webpack configuration is located at:
+
+**Location**: `webpack/webpack.config.mjs:1`
+
+The configuration is generated dynamically based on `ryunix.config.js` settings and exports either a single config (CSR) or dual configs (SSR/SSG).
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="CLI & Server" icon="terminal" href="/webpack/cli-server">
+    Learn about CLI commands and server architecture
+  </Card>
+  <Card title="Configuration" icon="gear" href="/webpack/configuration">
+    Customize webpack settings in ryunix.config.js
+  </Card>
+  <Card title="Routing" icon="route" href="/webpack/routing-ssr-ssg">
+    Understand file-system routing and SSR/SSG
+  </Card>
+  <Card title="Loaders" icon="code" href="/webpack/loaders">
+    Deep dive into custom loaders
+  </Card>
+</CardGroup>

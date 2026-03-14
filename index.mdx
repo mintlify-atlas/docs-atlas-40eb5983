@@ -1,97 +1,93 @@
 ---
 title: "Introduction"
-description: "Welcome to the new home for your documentation"
+description: "A powerful JavaScript UI framework with custom reconciliation engine for building high-performance web applications"
 ---
 
-## Setting up
+<Note>
+RyunixJS is a standalone JavaScript framework designed for modern web development with built-in SSR, SSG, and a familiar Hooks-based API.
+</Note>
 
-Get your documentation site up and running in minutes.
+## What is RyunixJS?
 
-<Card
-  title="Start here"
-  icon="rocket"
-  href="/quickstart"
-  horizontal
->
-  Follow our three step quickstart guide.
-</Card>
+RyunixJS is a modern UI framework designed to be **completely standalone**. While it draws inspiration from popular libraries like React and Preact, it implements its own custom reconciliation engine and provides a familiar API (Hooks, Components) with unique features for priority scheduling and server-side rendering.
 
-## Make it yours
+Whether you're building a simple static site or a complex Single Page Application (SPA) with Server-Side Rendering (SSR), RyunixJS gives you the tools to do it efficiently.
 
-Design a docs site that looks great and empowers your users.
+## Key Features
 
-<Columns cols={2}>
-  <Card
-    title="Edit locally"
-    icon="pen-to-square"
-    href="/development"
-  >
-    Edit your docs locally and preview them in real time.
+<CardGroup cols={2}>
+  <Card title="Zero Dependencies" icon="feather">
+    The core library is lightweight and completely independent with no external dependencies
   </Card>
-  <Card
-    title="Customize your site"
-    icon="palette"
-    href="/essentials/settings"
-  >
-    Customize the design and colors of your site to match your brand.
+  <Card title="Familiar Hooks API" icon="hook">
+    Use `useStore`, `useEffect`, `useContext`, and more - similar to React but with specialized features
   </Card>
-    <Card
-    title="Set up navigation"
-    icon="map"
-    href="/essentials/navigation"
-  >
-    Organize your docs to help users find what they need and succeed with your product.
+  <Card title="Hybrid Rendering" icon="globe">
+    Built-in support for SSR (Server-Side Rendering) and SSG (Static Site Generation)
   </Card>
-  <Card
-    title="API documentation"
-    icon="terminal"
-    href="/api-reference/introduction"
-  >
-    Auto-generate API documentation from OpenAPI specifications.
+  <Card title="Server Components" icon="server">
+    Modern full-stack workflows with Server Components and Server Actions
   </Card>
-</Columns>
+  <Card title="File-System Routing" icon="folder-tree">
+    Automatic routing based on your file structure with support for layouts and nested routes
+  </Card>
+  <Card title="DevTools Extension" icon="browser">
+    Debug your applications with a dedicated browser extension
+  </Card>
+</CardGroup>
 
-## Create beautiful pages
+## Quick Start
 
-Everything you need to create world-class documentation.
+Get started with RyunixJS in seconds using the official CLI:
 
-<Columns cols={2}>
-  <Card
-    title="Write with MDX"
-    icon="pen-fancy"
-    href="/essentials/markdown"
-  >
-    Use MDX to style your docs pages.
-  </Card>
-  <Card
-    title="Code samples"
-    icon="code"
-    href="/essentials/code"
-  >
-    Add sample code to demonstrate how to use your product.
-  </Card>
-  <Card
-    title="Images"
-    icon="image"
-    href="/essentials/images"
-  >
-    Display images and other media.
-  </Card>
-  <Card
-    title="Reusable snippets"
-    icon="recycle"
-    href="/essentials/reusable-snippets"
-  >
-    Write once and reuse across your docs.
-  </Card>
-</Columns>
+<CodeGroup>
 
-## Need inspiration?
+```bash npm
+npx @unsetsoft/cra@latest my-ryunix-app
+cd my-ryunix-app
+npm run dev
+```
 
-<Card
-  title="See complete examples"
-  icon="stars"
-  href="https://mintlify.com/customers"
->
-  Browse our showcase of exceptional documentation sites.
+```bash yarn
+npx @unsetsoft/cra@latest my-ryunix-app
+cd my-ryunix-app
+yarn dev
+```
+
+```bash pnpm
+npx @unsetsoft/cra@latest my-ryunix-app
+cd my-ryunix-app
+pnpm dev
+```
+
+</CodeGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Installation" icon="download" href="/installation">
+    Install RyunixJS in your project
+  </Card>
+  <Card title="Quickstart Guide" icon="rocket" href="/quickstart">
+    Build your first RyunixJS application
+  </Card>
+  <Card title="Core Concepts" icon="book" href="/core/architecture">
+    Understand the architecture and design
+  </Card>
+  <Card title="API Reference" icon="code" href="/api/createElement">
+    Explore the complete API documentation
+  </Card>
+</CardGroup>
+
+## Framework Architecture
+
+RyunixJS is built on several core principles:
+
+- **Custom Reconciliation Engine**: A fiber-based reconciler that manages the virtual DOM and efficiently updates the real DOM
+- **Priority-Based Scheduling**: Built-in support for concurrent rendering with priority levels (HIGH, NORMAL, LOW)
+- **Comprehensive Hooks**: Specialized hooks like `usePersistentStore`, `useSwitch`, `useDebounce`, and `useThrottle`
+- **Webpack Integration**: Powerful build system with custom plugins for routing, SSR, and SSG
+
+<Card title="Learn More About the Architecture" icon="diagram-project" href="/core/architecture">
+  Dive deep into how RyunixJS works under the hood
 </Card>

@@ -1,0 +1,237 @@
+---
+title: ryunix lint
+description: Lint your Ryunix application using ESLint
+---
+
+## Usage
+
+```bash
+ryunix lint [options]
+```
+
+Runs ESLint against configured files using the internal Ryunix ESLint configuration.
+
+## Options
+
+### `-f, --fix`
+
+Automatically fix fixable problems.
+
+```bash
+ryunix lint --fix
+```
+
+**Alias:** `-f`
+
+```bash
+ryunix lint -f
+```
+
+## Description
+
+The `lint` command:
+
+- Uses the built-in Ryunix ESLint configuration
+- Lints all configured file patterns (default: `**/*.ryx`)
+- Outputs results using the `stylish` formatter
+- Automatically applies fixes when `--fix` is specified
+
+## Configuration
+
+### Default Files
+
+By default, lints all `.ryx` files:
+
+```js
+// ryunix.config.js
+module.exports = {
+  eslint: {
+    files: ['**/*.ryx'],
+  },
+}
+```
+
+### Custom File Patterns
+
+Specify which files to lint in `ryunix.config.js`:
+
+```js
+module.exports = {
+  eslint: {
+    files: [
+      '**/*.ryx',
+      '**/*.jsx',
+      '**/*.js',
+    ],
+  },
+}
+```
+
+### Custom Rules
+
+Override or extend ESLint rules:
+
+```js
+module.exports = {
+  eslint: {
+    rules: {
+      'max-len': ['error', { code: 120 }],
+      'no-console': 'warn',
+      'react/prop-types': 'off',
+    },
+  },
+}
+```
+
+### Custom Plugins
+
+Add additional ESLint plugins:
+
+```js
+const importPlugin = require('eslint-plugin-import')
+
+module.exports = {
+  eslint: {
+    plugins: {
+      import: importPlugin,
+    },
+    rules: {
+      'import/order': 'warn',
+    },
+  },
+}
+```
+
+## Default Rules
+
+Ryunix ships with sensible defaults optimized for React development:
+
+```js
+{
+  'max-len': ['error', { code: 400 }],
+  'camelcase': 'off',
+  'no-unused-vars': 'warn',
+  'no-console': 'off',
+  'no-underscore-dangle': ['error', { allow: ['id_', '_id'] }],
+  'arrow-body-style': 'off',
+  'indent': ['warn', 2],
+  'consistent-return': 'off',
+  'no-else-return': 'off',
+  'global-require': 'off',
+  'no-param-reassign': ['error', { props: false }],
+  'new-cap': 'off',
+  'arrow-parens': 'off',
+  'prefer-destructuring': 'warn',
+  'no-nested-ternary': 'off',
+  'react/jsx-uses-vars': 'warn',
+  'react/jsx-uses-react': 'off',
+  'react/react-in-jsx-scope': 'off',
+}
+```
+
+### Key Features
+
+- **React 17+ JSX Transform**: No need to import React in every file
+- **Flexible naming**: Allows underscores in specific cases
+- **Permissive console**: `console.log` is allowed by default
+- **Destructuring suggestions**: Warns instead of errors
+
+## Example Output
+
+### No Issues
+
+```bash
+ryunix lint
+```
+
+```
+(No output - all files pass)
+```
+
+### With Warnings
+
+```bash
+ryunix lint
+```
+
+```
+/path/to/src/components/Button.ryx
+  12:7  warning  Unexpected var, use let or const instead  no-var
+  24:5  warning  'user' is assigned a value but never used  no-unused-vars
+
+✖ 2 problems (0 errors, 2 warnings)
+```
+
+### Auto-fix Example
+
+```bash
+ryunix lint --fix
+```
+
+```
+/path/to/src/components/Button.ryx
+  24:5  warning  'user' is assigned a value but never used  no-unused-vars
+
+✖ 1 problem (0 errors, 1 warning)
+  0 errors and 1 warning potentially fixable with the `--fix` option.
+```
+
+## Integration
+
+### CI/CD Pipeline
+
+```yaml
+# .github/workflows/ci.yml
+name: CI
+on: [push, pull_request]
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-node@v3
+        with:
+          node-version: 20
+      - run: npm ci
+      - run: npm run lint
+```
+
+### Pre-commit Hook
+
+```json
+// package.json
+{
+  "husky": {
+    "hooks": {
+      "pre-commit": "ryunix lint --fix"
+    }
+  }
+}
+```
+
+### VS Code Integration
+
+Install the ESLint extension and add to `.vscode/settings.json`:
+
+```json
+{
+  "eslint.validate": [
+    "javascript",
+    "javascriptreact",
+    "ryx"
+  ],
+  "editor.codeActionsOnSave": {
+    "source.fixAll.eslint": true
+  }
+}
+```
+
+## Exit Codes
+
+- `0` - No linting errors (warnings are allowed)
+- `1` - Linting errors found
+
+## Related Commands
+
+- [`ryunix dev`](/cli/dev) - Linting is automatically run in dev mode
+- [`ryunix build`](/cli/build) - Build enforces linting rules

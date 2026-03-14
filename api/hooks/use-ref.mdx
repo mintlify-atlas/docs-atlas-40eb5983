@@ -1,0 +1,322 @@
+---
+title: "useRef"
+description: "Mutable references that persist across renders"
+---
+
+## Overview
+
+Provides a mutable object that persists across renders. The returned object has a `current` property that can be mutated without triggering re-renders. Commonly used for accessing DOM elements and storing mutable values.
+
+## Signature
+
+```typescript
+function useRef<T>(initialValue: T): { current: T }
+```
+
+<ParamField path="initialValue" type="T" required>
+  The initial value for the `current` property. This value is only used during the first render.
+</ParamField>
+
+<ResponseField name="ref" type="{ current: T }">
+  A mutable ref object with a `current` property. Mutating `ref.current` does not trigger a re-render.
+</ResponseField>
+
+## Usage
+
+### Accessing DOM Elements
+
+```javascript
+import { useRef, useEffect } from '@ryunixjs/core'
+
+const InputWithFocus = () => {
+  const inputRef = useRef(null)
+
+  useEffect(() => {
+    // Focus the input on mount
+    if (inputRef.current) {
+      inputRef.current.focus()
+    }
+  }, [])
+
+  return <input ref={inputRef} type="text" placeholder="Auto-focused" />
+}
+```
+
+### Storing Mutable Values
+
+```javascript
+import { useRef, useEffect, useStore } from '@ryunixjs/core'
+
+const Timer = () => {
+  const [count, setCount] = useStore(0)
+  const intervalRef = useRef(null)
+
+  useEffect(() => {
+    intervalRef.current = setInterval(() => {
+      setCount(prev => prev + 1)
+    }, 1000)
+
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current)
+      }
+    }
+  }, [])
+
+  const stopTimer = () => {
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current)
+      intervalRef.current = null
+    }
+  }
+
+  return (
+    <div>
+      <div>Count: {count}</div>
+      <button onClick={stopTimer}>Stop</button>
+    </div>
+  )
+}
+```
+
+### Previous Value Tracking
+
+```javascript
+const usePrevious = (value) => {
+  const ref = useRef()
+
+  useEffect(() => {
+    ref.current = value
+  })
+
+  return ref.current
+}
+
+const Counter = () => {
+  const [count, setCount] = useStore(0)
+  const prevCount = usePrevious(count)
+
+  return (
+    <div>
+      <div>Current: {count}</div>
+      <div>Previous: {prevCount}</div>
+      <button onClick={() => setCount(count + 1)}>Increment</button>
+    </div>
+  )
+}
+```
+
+### Avoiding Stale Closures
+
+```javascript
+const Chat = () => {
+  const [messages, setMessages] = useStore([])
+  const messagesRef = useRef(messages)
+
+  // Keep ref in sync with state
+  useEffect(() => {
+    messagesRef.current = messages
+  }, [messages])
+
+  useEffect(() => {
+    const socket = connectToChat()
+
+    socket.on('message', (msg) => {
+      // messagesRef.current always has the latest value
+      // even though this callback was created once
+      setMessages([...messagesRef.current, msg])
+    })
+
+    return () => socket.disconnect()
+  }, []) // Empty deps - effect only runs once
+
+  return <div>{messages.map(m => <div key={m.id}>{m.text}</div>)}</div>
+}
+```
+
+### Instance Variables
+
+```javascript
+const VideoPlayer = ({ src }) => {
+  const videoRef = useRef(null)
+  const playbackRateRef = useRef(1)
+
+  const setPlaybackRate = (rate) => {
+    playbackRateRef.current = rate
+    if (videoRef.current) {
+      videoRef.current.playbackRate = rate
+    }
+  }
+
+  return (
+    <div>
+      <video ref={videoRef} src={src} />
+      <button onClick={() => setPlaybackRate(0.5)}>0.5x</button>
+      <button onClick={() => setPlaybackRate(1)}>1x</button>
+      <button onClick={() => setPlaybackRate(2)}>2x</button>
+    </div>
+  )
+}
+```
+
+### Measuring Elements
+
+```javascript
+import { useRef, useLayoutEffect, useStore } from '@ryunixjs/core'
+
+const MeasuredDiv = () => {
+  const divRef = useRef(null)
+  const [dimensions, setDimensions] = useStore({ width: 0, height: 0 })
+
+  useLayoutEffect(() => {
+    if (divRef.current) {
+      const { width, height } = divRef.current.getBoundingClientRect()
+      setDimensions({ width, height })
+    }
+  })
+
+  return (
+    <div ref={divRef}>
+      Width: {dimensions.width}px, Height: {dimensions.height}px
+    </div>
+  )
+}
+```
+
+### Debounce with Ref
+
+```javascript
+const SearchInput = () => {
+  const [query, setQuery] = useStore('')
+  const [results, setResults] = useStore([])
+  const timeoutRef = useRef(null)
+
+  const handleSearch = (value) => {
+    setQuery(value)
+
+    // Clear previous timeout
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current)
+    }
+
+    // Set new timeout
+    timeoutRef.current = setTimeout(async () => {
+      const response = await fetch(`/api/search?q=${value}`)
+      const data = await response.json()
+      setResults(data)
+    }, 300)
+  }
+
+  useEffect(() => {
+    // Cleanup on unmount
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current)
+      }
+    }
+  }, [])
+
+  return (
+    <div>
+      <input value={query} onChange={e => handleSearch(e.target.value)} />
+      {results.map(r => <div key={r.id}>{r.title}</div>)}
+    </div>
+  )
+}
+```
+
+## Key Characteristics
+
+- **Persistent**: The ref object persists for the entire lifetime of the component
+- **Mutable**: You can modify `ref.current` directly without triggering re-renders
+- **Synchronous**: Changes to `ref.current` are immediately visible
+- **Not reactive**: Mutating `ref.current` does not cause re-renders or re-run effects
+
+## Common Patterns
+
+### ref vs state
+
+```javascript
+// Use state when:
+// - The value needs to trigger re-renders
+// - The value is displayed in the UI
+const [count, setCount] = useStore(0)
+
+// Use ref when:
+// - The value should NOT trigger re-renders
+// - Storing DOM references
+// - Storing mutable instance variables
+const countRef = useRef(0)
+```
+
+### Callback Refs
+
+```javascript
+const MeasuredComponent = () => {
+  const [height, setHeight] = useStore(0)
+
+  // Callback ref - called when element mounts/unmounts
+  const measuredRef = (node) => {
+    if (node !== null) {
+      setHeight(node.getBoundingClientRect().height)
+    }
+  }
+
+  return <div ref={measuredRef}>Content</div>
+}
+```
+
+## Behavior
+
+- During server-side rendering, `useRef` returns `{ current: initialValue }`
+- The ref object identity is stable across re-renders
+- Mutating `ref.current` does not trigger re-renders
+- The initial value is only used on the first render
+- Validates hook context in development mode
+
+## Common Pitfalls
+
+### Don't read/write refs during render
+
+```javascript
+// ❌ Bad - reading ref during render
+const Component = () => {
+  const ref = useRef(0)
+  ref.current = ref.current + 1 // Don't mutate during render
+  return <div>{ref.current}</div>
+}
+
+// ✅ Good - read/write in effects or event handlers
+const Component = () => {
+  const ref = useRef(0)
+
+  const handleClick = () => {
+    ref.current = ref.current + 1
+    console.log(ref.current)
+  }
+
+  return <button onClick={handleClick}>Click</button>
+}
+```
+
+### Ref changes don't trigger effects
+
+```javascript
+// ❌ This effect won't re-run when ref.current changes
+const Component = () => {
+  const ref = useRef(0)
+
+  useEffect(() => {
+    console.log(ref.current)
+  }, [ref.current]) // ref.current is not tracked
+
+  return <div />
+}
+```
+
+## Related Hooks
+
+- [useEffect](/api/hooks/use-effect) - For DOM operations with refs
+- [useLayoutEffect](/api/hooks/use-effect#uselayouteffect) - For synchronous DOM measurements
+- [useCallback](/api/hooks/use-memo-callback) - Often used with refs to create stable callbacks
+- [useId](/api/hooks/use-ref#useid) - For generating unique IDs

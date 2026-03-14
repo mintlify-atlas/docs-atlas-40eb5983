@@ -1,0 +1,98 @@
+---
+title: ryunix dev
+description: Start the Ryunix development server with Hot Module Replacement
+---
+
+## Usage
+
+```bash
+ryunix dev [options]
+```
+
+Starts the Webpack Dev Server with Hot Module Replacement (HMR) for rapid development.
+
+## Description
+
+The `dev` command launches a development server that:
+
+- Dynamically finds an available port (default: 3000)
+- Clears the `.ryunix/cache` directory before starting
+- Enables Hot Module Replacement for instant updates
+- Provides a development-optimized build with DevTools warnings
+- Automatically increments the port if the default is in use (3000 → 3001)
+
+## Options
+
+### `--browser`
+
+Automatically opens the application in your default browser when the server starts.
+
+```bash
+ryunix dev --browser
+```
+
+## Configuration
+
+The development server respects the following settings from `ryunix.config.js`:
+
+- `port` - Initial port to try (default: `3000`)
+- `proxy` - Proxy configuration for API requests
+- `webpack.devServer.allowedHosts` - Allowed hosts for the dev server
+- `webpack.experiments.lazyCompilation` - Enable lazy compilation for faster startup
+
+## Example Output
+
+```bash
+ryunix dev
+```
+
+```
+Starting development server, please wait...
+
+╭──────────── Dev Server ─────────────╮
+│                                     │
+│   <Ryunix/> v3.0.0                  │
+│                                     │
+│   Ready at: http://localhost:3000/ │
+│   Config:   ✔ Loaded                │
+│   Env:      ✔ Loaded                │
+│   Mode:     development             │
+│                                     │
+│   ⚠️  Development mode active        │
+│   Build for production to optimize  │
+│                                     │
+╰─────────────────────────────────────╯
+```
+
+## Environment
+
+Sets `RYUNIX_MODE=development` automatically.
+
+## Common Scenarios
+
+### Port Already in Use
+
+If port 3000 is occupied, the CLI automatically finds the next available port:
+
+```
+Port 3000 is in use, trying port 3001...
+```
+
+### Missing Config File
+
+The server will still start, but show a warning:
+
+```
+Config:   ✘ Not found
+```
+
+### Missing .env File
+
+```
+Env:      ✘ Not found
+```
+
+## Related Commands
+
+- [`ryunix build`](/cli/build) - Build for production
+- [`ryunix start`](/cli/start) - Start production server

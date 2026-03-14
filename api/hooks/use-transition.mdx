@@ -1,0 +1,426 @@
+---
+title: "useTransition & useDeferredValue"
+description: "Concurrent mode primitives for non-urgent updates"
+---
+
+## Overview
+
+RyunixJS features a localized priority scheduler that allows marking specific state updates as non-urgent, keeping the application responsive during heavy renders. These hooks are built on top of the priority scheduling system.
+
+## useTransition
+
+Marks state updates as non-urgent (low priority), preventing UI blocking during expensive operations.
+
+### Signature
+
+```typescript
+function useTransition(): [boolean, (callback: () => void) => void]
+```
+
+<ResponseField name="isPending" type="boolean">
+  Indicates whether a transition is currently in progress. Set to `true` when `startTransition` is called, and `false` when the transition completes.
+</ResponseField>
+
+<ResponseField name="startTransition" type="(callback: () => void) => void">
+  Function to execute a callback with low priority. The callback typically contains state updates that should not block user interactions.
+</ResponseField>
+
+### Usage
+
+#### Search with Transitions
+
+```javascript
+import { useTransition, useStore } from '@ryunixjs/core'
+
+const SearchResults = ({ items }) => {
+  const [query, setQuery] = useStore('')
+  const [filteredItems, setFilteredItems] = useStore(items)
+  const [isPending, startTransition] = useTransition()
+
+  const handleSearch = (value) => {
+    // Urgent: update input immediately
+    setQuery(value)
+
+    // Non-urgent: filter large list
+    startTransition(() => {
+      const filtered = items.filter(item =>
+        item.name.toLowerCase().includes(value.toLowerCase())
+      )
+      setFilteredItems(filtered)
+    })
+  }
+
+  return (
+    <div>
+      <input
+        value={query}
+        onChange={e => handleSearch(e.target.value)}
+        placeholder="Search..."
+      />
+      {isPending && <div>Updating results...</div>}
+      <div>
+        {filteredItems.map(item => (
+          <div key={item.id}>{item.name}</div>
+        ))}
+      </div>
+    </div>
+  )
+}
+```
+
+#### Tab Switching
+
+```javascript
+const TabContainer = () => {
+  const [activeTab, setActiveTab] = useStore('home')
+  const [isPending, startTransition] = useTransition()
+
+  const switchTab = (tab) => {
+    startTransition(() => {
+      setActiveTab(tab)
+    })
+  }
+
+  return (
+    <div>
+      <div className="tabs">
+        <button
+          onClick={() => switchTab('home')}
+          className={activeTab === 'home' ? 'active' : ''}
+        >
+          Home {isPending && activeTab !== 'home' && '...'}
+        </button>
+        <button
+          onClick={() => switchTab('profile')}
+          className={activeTab === 'profile' ? 'active' : ''}
+        >
+          Profile {isPending && activeTab !== 'profile' && '...'}
+        </button>
+        <button
+          onClick={() => switchTab('settings')}
+          className={activeTab === 'settings' ? 'active' : ''}
+        >
+          Settings {isPending && activeTab !== 'settings' && '...'}
+        </button>
+      </div>
+      {isPending && <div className="loading-bar">Loading...</div>}
+      <TabContent tab={activeTab} />
+    </div>
+  )
+}
+```
+
+#### Data Table Sorting
+
+```javascript
+const DataTable = ({ data }) => {
+  const [sortBy, setSortBy] = useStore('name')
+  const [sortedData, setSortedData] = useStore(data)
+  const [isPending, startTransition] = useTransition()
+
+  const handleSort = (column) => {
+    // Urgent: update sort indicator immediately
+    setSortBy(column)
+
+    // Non-urgent: sort large dataset
+    startTransition(() => {
+      const sorted = [...data].sort((a, b) => {
+        if (a[column] < b[column]) return -1
+        if (a[column] > b[column]) return 1
+        return 0
+      })
+      setSortedData(sorted)
+    })
+  }
+
+  return (
+    <table>
+      <thead>
+        <tr>
+          <th onClick={() => handleSort('name')}>
+            Name {sortBy === 'name' && '↓'} {isPending && '⏳'}
+          </th>
+          <th onClick={() => handleSort('age')}>
+            Age {sortBy === 'age' && '↓'}
+          </th>
+        </tr>
+      </thead>
+      <tbody>
+        {sortedData.map(row => (
+          <tr key={row.id}>
+            <td>{row.name}</td>
+            <td>{row.age}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  )
+}
+```
+
+## useDeferredValue
+
+Defers updates to a value, preventing UI blocking on fast inputs. The deferred value updates with low priority after a delay.
+
+### Signature
+
+```typescript
+function useDeferredValue<T>(value: T): T
+```
+
+<ParamField path="value" type="T" required>
+  The value to defer. This is typically a prop or state value that changes frequently.
+</ParamField>
+
+<ResponseField name="deferredValue" type="T">
+  The deferred version of the value. Updates with a 100ms delay and low priority.
+</ResponseField>
+
+### Usage
+
+#### Deferred Search
+
+```javascript
+import { useDeferredValue, useStore } from '@ryunixjs/core'
+
+const SearchableList = ({ items }) => {
+  const [query, setQuery] = useStore('')
+  const deferredQuery = useDeferredValue(query)
+
+  // Expensive filtering uses deferred value
+  const filteredItems = items.filter(item =>
+    item.name.toLowerCase().includes(deferredQuery.toLowerCase())
+  )
+
+  return (
+    <div>
+      {/* Input updates immediately */}
+      <input
+        value={query}
+        onChange={e => setQuery(e.target.value)}
+        placeholder="Search..."
+      />
+      {/* Show when deferred value is behind */}
+      {query !== deferredQuery && <div>Updating...</div>}
+      <div>
+        {filteredItems.map(item => (
+          <div key={item.id}>{item.name}</div>
+        ))}
+      </div>
+    </div>
+  )
+}
+```
+
+#### Deferred Rendering
+
+```javascript
+const VisualizationContainer = () => {
+  const [sliderValue, setSliderValue] = useStore(50)
+  const deferredValue = useDeferredValue(sliderValue)
+
+  return (
+    <div>
+      {/* Slider updates immediately */}
+      <input
+        type="range"
+        min="0"
+        max="100"
+        value={sliderValue}
+        onChange={e => setSliderValue(Number(e.target.value))}
+      />
+      <div>Current: {sliderValue}</div>
+      {/* Expensive visualization uses deferred value */}
+      <ExpensiveVisualization value={deferredValue} />
+    </div>
+  )
+}
+```
+
+#### Comparing Values
+
+```javascript
+const SmartList = ({ items }) => {
+  const [filter, setFilter] = useStore('')
+  const deferredFilter = useDeferredValue(filter)
+
+  const isStale = filter !== deferredFilter
+
+  return (
+    <div>
+      <input
+        value={filter}
+        onChange={e => setFilter(e.target.value)}
+      />
+      <div style={{ opacity: isStale ? 0.5 : 1 }}>
+        {items
+          .filter(item => item.name.includes(deferredFilter))
+          .map(item => <div key={item.id}>{item.name}</div>)
+        }
+      </div>
+    </div>
+  )
+}
+```
+
+## Priority System
+
+RyunixJS uses a priority scheduling system with three levels:
+
+```javascript
+const Priority = {
+  IMMEDIATE: 1,  // Highest priority (user interactions)
+  NORMAL: 2,     // Default priority
+  LOW: 3         // Lowest priority (transitions, deferred values)
+}
+```
+
+### useStorePriority
+
+Low-level hook that backs `useTransition` and `useDeferredValue`:
+
+```javascript
+import { useStorePriority, Priority } from '@ryunixjs/core'
+
+const Component = () => {
+  const [state, dispatch] = useStorePriority(initialState)
+
+  const urgentUpdate = () => {
+    dispatch(newValue, Priority.IMMEDIATE)
+  }
+
+  const normalUpdate = () => {
+    dispatch(newValue, Priority.NORMAL)
+  }
+
+  const lowPriorityUpdate = () => {
+    dispatch(newValue, Priority.LOW)
+  }
+}
+```
+
+## Implementation Details
+
+### useTransition
+
+```javascript
+const useTransition = () => {
+  const [isPending, setIsPending] = useStorePriority(false)
+
+  const startTransition = (callback) => {
+    setIsPending(true, Priority.IMMEDIATE)
+
+    setTimeout(() => {
+      runWithPriority(Priority.LOW, () => {
+        callback()
+        setIsPending(false, Priority.LOW)
+      })
+    }, 0)
+  }
+
+  return [isPending, startTransition]
+}
+```
+
+### useDeferredValue
+
+```javascript
+const useDeferredValue = (value) => {
+  const [deferredValue, setDeferredValue] = useStorePriority(value)
+
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      setDeferredValue(value, Priority.LOW)
+    }, 100)
+
+    return () => clearTimeout(timeout)
+  }, [value])
+
+  return deferredValue
+}
+```
+
+## When to Use
+
+### useTransition
+- Expensive rendering operations (large lists, charts, visualizations)
+- Tab switching with heavy content
+- Filtering/sorting large datasets
+- Route transitions
+- Any update that shouldn't block user input
+
+### useDeferredValue
+- Search inputs with expensive filtering
+- Slider-controlled visualizations
+- Real-time form validation
+- Any frequently changing value with expensive dependent calculations
+
+## Comparison
+
+| Feature | useTransition | useDeferredValue |
+|---------|--------------|------------------|
+| Use case | Wrapping state updates | Deferring a value |
+| Pending state | Yes (`isPending`) | No (compare values manually) |
+| Delay | Immediate (setTimeout 0) | 100ms |
+| Control | Explicit (call `startTransition`) | Automatic (tracks value changes) |
+
+## Best Practices
+
+### Don't Defer Everything
+
+```javascript
+// ❌ Bad - user input should be immediate
+const handleChange = (value) => {
+  startTransition(() => {
+    setValue(value) // Input feels sluggish
+  })
+}
+
+// ✅ Good - only defer expensive operations
+const handleChange = (value) => {
+  setValue(value) // Immediate
+  startTransition(() => {
+    setFilteredResults(filterLargeDataset(value)) // Deferred
+  })
+}
+```
+
+### Show Loading States
+
+```javascript
+const Component = () => {
+  const [isPending, startTransition] = useTransition()
+
+  return (
+    <div>
+      {isPending && <Spinner />}
+      {/* Or use opacity */}
+      <div style={{ opacity: isPending ? 0.7 : 1 }}>
+        Content
+      </div>
+    </div>
+  )
+}
+```
+
+### Combine with Memoization
+
+```javascript
+import { useMemo, useDeferredValue } from '@ryunixjs/core'
+
+const Component = ({ items }) => {
+  const [query, setQuery] = useStore('')
+  const deferredQuery = useDeferredValue(query)
+
+  // Memoize expensive calculation
+  const filtered = useMemo(() => {
+    return items.filter(item => item.name.includes(deferredQuery))
+  }, [items, deferredQuery])
+}
+```
+
+## Related Hooks
+
+- [useStore](/api/hooks/use-store) - Basic state management
+- [useMemo](/api/hooks/use-memo-callback) - Memoization for expensive calculations
+- [useEffect](/api/hooks/use-effect) - Side effects

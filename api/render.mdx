@@ -1,0 +1,276 @@
+---
+title: 'Client-Side Rendering'
+description: 'Render and hydrate Ryunix applications in the browser'
+---
+
+## render
+
+The `render` function updates the DOM with a new element and schedules work to render it in the specified container. This is used for client-side rendering (CSR).
+
+```javascript
+import { render } from 'ryunixjs'
+```
+
+### Function Signature
+
+```javascript
+const render = (element, container)
+```
+
+<ParamField path="element" type="object" required>
+  The Ryunix element to render. This could be:
+  - A virtual DOM element created with `createElement`
+  - A component (when wrapped in `createElement`)
+  - Any valid element to display on the screen
+</ParamField>
+
+<ParamField path="container" type="HTMLElement" required>
+  The DOM element where the element will be rendered. The element will be appended as a child to this container.
+</ParamField>
+
+<ResponseField name="root" type="object">
+  Returns the work-in-progress root object containing:
+  - `dom`: The container DOM element
+  - `props`: Properties including the children
+  - `alternate`: Reference to the previous root
+  - `isHydrating`: Set to `false` for CSR
+  - `hydrateCursor`: Set to `null` for CSR
+</ResponseField>
+
+### Examples
+
+#### Basic rendering
+
+```javascript
+import { render, createElement } from 'ryunixjs'
+
+const App = () => {
+  return createElement('div', null, 'Hello, Ryunix!')
+}
+
+const container = document.getElementById('root')
+render(createElement(App), container)
+```
+
+#### Rendering with JSX
+
+```jsx
+import { render } from 'ryunixjs'
+
+const App = () => {
+  return <div className="app">Hello, Ryunix!</div>
+}
+
+const container = document.getElementById('root')
+render(<App />, container)
+```
+
+### Behavior Notes
+
+- **Container Clearing**: The container is cleared before CSR render to avoid duplication
+- **Work Scheduling**: Uses Ryunix's fiber architecture to schedule work incrementally
+- **State Management**: Maintains a reference to the current root for updates and reconciliation
+
+---
+
+## hydrate
+
+The `hydrate` function attaches Ryunix to an existing server-rendered DOM tree. Instead of clearing and re-rendering, it walks the existing DOM nodes and attaches event listeners and reconciles state, preserving SSR HTML.
+
+```javascript
+import { hydrate } from 'ryunixjs'
+```
+
+### Function Signature
+
+```javascript
+const hydrate = (element, container)
+```
+
+<ParamField path="element" type="object" required>
+  The Ryunix element that matches the server-rendered content.
+</ParamField>
+
+<ParamField path="container" type="HTMLElement" required>
+  The DOM element containing the server-rendered HTML.
+</ParamField>
+
+<ResponseField name="root" type="object">
+  Returns the work-in-progress root object with:
+  - `dom`: The container DOM element
+  - `props`: Properties including the children
+  - `alternate`: Reference to the previous root
+  - `isHydrating`: Set to `true` for hydration
+  - `hydrateCursor`: Points to the first valid child node to hydrate
+</ResponseField>
+
+### Examples
+
+#### Hydrating server-rendered content
+
+```jsx
+import { hydrate } from 'ryunixjs'
+
+const App = () => {
+  return <div className="app">Hello, Ryunix!</div>
+}
+
+const container = document.getElementById('root')
+hydrate(<App />, container)
+```
+
+### Behavior Notes
+
+- **DOM Preservation**: Existing server-rendered HTML is preserved and reused
+- **Event Attachment**: Event listeners are attached to existing DOM nodes
+- **State Reconciliation**: Client-side state is reconciled with server-rendered content
+- **Valid Node Skipping**: Automatically skips empty text nodes (whitespace) and comment nodes during hydration
+
+---
+
+## init
+
+The `init` function initializes a Ryunix application, automatically choosing between hydration (for SSR content) or client-side rendering based on the environment and container state.
+
+```javascript
+import { init } from 'ryunixjs'
+```
+
+### Function Signature
+
+```javascript
+const init = (MainElement, root = '__ryunix', components = {})
+```
+
+<ParamField path="MainElement" type="object" required>
+  The main component or element to render on the webpage.
+</ParamField>
+
+<ParamField path="root" type="string" default="__ryunix">
+  The ID of the root container element. Defaults to `'__ryunix'`.
+</ParamField>
+
+<ParamField path="components" type="object" default="{}">
+  A registry of island components for partial hydration. Keys are component IDs, values are component functions.
+</ParamField>
+
+<ResponseField name="result" type="object">
+  Returns the result from either `hydrate()` or `render()` depending on the detected mode.
+</ResponseField>
+
+### Examples
+
+#### Basic initialization
+
+```jsx
+import { init, createElement } from 'ryunixjs'
+
+const App = () => {
+  return <div>My Application</div>
+}
+
+init(<App />)
+```
+
+#### Custom root element
+
+```jsx
+import { init } from 'ryunixjs'
+
+const App = () => {
+  return <div>My Application</div>
+}
+
+init(<App />, 'app-root')
+```
+
+#### With island components
+
+```jsx
+import { init } from 'ryunixjs'
+import { Counter } from './islands/Counter'
+import { TodoList } from './islands/TodoList'
+
+const App = () => {
+  return <div>My Application</div>
+}
+
+init(<App />, '__ryunix', {
+  Counter,
+  TodoList
+})
+```
+
+### Behavior Notes
+
+- **Auto-Detection**: Automatically detects if SSR content exists and uses hydration
+- **Island Hydration**: Hydrates islands architecture components if provided
+- **Environment Checks**: Only runs in browser environment (checks for `window`)
+- **Debug Mode**: Logs initialization steps when `RYUNIX_DEBUG` is enabled
+- **SSR Mode**: Respects `RYUNIX_SSR` environment variable to determine rendering strategy
+
+---
+
+## hydrateIslands
+
+The `hydrateIslands` function hydrates individual island components marked with `data-ryunix-island` attributes. This enables partial hydration for islands architecture.
+
+```javascript
+import { hydrateIslands } from 'ryunixjs'
+```
+
+### Function Signature
+
+```javascript
+const hydrateIslands = (components = {}, hasMainElement = false)
+```
+
+<ParamField path="components" type="object" default="{}">
+  A registry mapping component IDs to component functions. Used to look up components for hydration.
+</ParamField>
+
+<ParamField path="hasMainElement" type="boolean" default="false">
+  Whether a main element is hydrating the page. If `true`, islands inside non-server boundaries are automatically hydrated by the main element.
+</ParamField>
+
+### Examples
+
+#### Standalone island hydration
+
+```javascript
+import { hydrateIslands } from 'ryunixjs'
+import { Counter } from './islands/Counter'
+import { SearchBar } from './islands/SearchBar'
+
+hydrateIslands({
+  Counter,
+  SearchBar
+})
+```
+
+#### Island with global registry
+
+```html
+<!-- Islands can also be registered globally -->
+<script>
+  window.__RYUNIX_ISLANDS__ = {
+    Counter: CounterComponent,
+    SearchBar: SearchBarComponent
+  }
+</script>
+```
+
+```javascript
+import { hydrateIslands } from 'ryunixjs'
+
+// Hydrates using global registry
+hydrateIslands()
+```
+
+### Behavior Notes
+
+- **Browser Only**: Returns early if not in browser environment
+- **Selective Hydration**: Only hydrates islands inside `ServerBoundary` when a main element is present
+- **Component Registry**: Falls back to `window.__RYUNIX_ISLANDS__` for global component lookup
+- **Props Deserialization**: Automatically deserializes props from `data-props` attribute
+- **Error Handling**: Logs warnings and errors in development mode for missing or failed components

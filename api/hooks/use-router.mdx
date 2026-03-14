@@ -1,0 +1,447 @@
+---
+title: "useRouter & Navigation"
+description: "Built-in SPA routing and navigation hooks"
+---
+
+## Overview
+
+RyunixJS includes built-in SPA (Single Page Application) routing capabilities. The router context provides location, params, query strings, and programmatic navigation.
+
+## useRouter
+
+Returns the router context with navigation state and utilities.
+
+### Signature
+
+```typescript
+function useRouter(): {
+  location: string,
+  params: Record<string, string | string[]>,
+  query: Record<string, string>,
+  navigate: (path: string) => void,
+  route: Route | null
+}
+```
+
+<ResponseField name="location" type="string">
+  The current pathname from `window.location.pathname`.
+</ResponseField>
+
+<ResponseField name="params" type="Record<string, string | string[]>">
+  URL parameters extracted from dynamic route segments (e.g., `/users/:id`). Catch-all routes return arrays.
+</ResponseField>
+
+<ResponseField name="query" type="Record<string, string>">
+  Query string parameters parsed from the URL.
+</ResponseField>
+
+<ResponseField name="navigate" type="(path: string) => void">
+  Function to programmatically navigate to a new route. Uses `history.pushState` for SPA mode or `window.location.assign` for MPA mode.
+</ResponseField>
+
+<ResponseField name="route" type="Route | null">
+  The currently matched route object, or null if no route matches.
+</ResponseField>
+
+### Usage
+
+#### Basic Navigation
+
+```javascript
+import { useRouter } from '@ryunixjs/core'
+
+const Navigation = () => {
+  const { location, navigate } = useRouter()
+
+  return (
+    <nav>
+      <button
+        onClick={() => navigate('/')}
+        className={location === '/' ? 'active' : ''}
+      >
+        Home
+      </button>
+      <button
+        onClick={() => navigate('/about')}
+        className={location === '/about' ? 'active' : ''}
+      >
+        About
+      </button>
+      <button
+        onClick={() => navigate('/contact')}
+        className={location === '/contact' ? 'active' : ''}
+      >
+        Contact
+      </button>
+    </nav>
+  )
+}
+```
+
+#### Accessing Route Params
+
+```javascript
+const UserProfile = () => {
+  const { params } = useRouter()
+  const userId = params.id
+
+  return <div>User ID: {userId}</div>
+}
+
+// Route definition: { path: '/users/:id', component: UserProfile }
+// URL: /users/123 → params.id = "123"
+```
+
+#### Query String Parameters
+
+```javascript
+const SearchResults = () => {
+  const { query } = useRouter()
+  const searchTerm = query.q || ''
+  const page = query.page || '1'
+
+  return (
+    <div>
+      <div>Searching for: {searchTerm}</div>
+      <div>Page: {page}</div>
+    </div>
+  )
+}
+
+// URL: /search?q=javascript&page=2
+// query = { q: 'javascript', page: '2' }
+```
+
+#### Programmatic Navigation
+
+```javascript
+const LoginForm = () => {
+  const { navigate } = useRouter()
+  const [credentials, setCredentials] = useStore({ email: '', password: '' })
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    const success = await login(credentials)
+    if (success) {
+      navigate('/dashboard')
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit}>
+      <input
+        type="email"
+        value={credentials.email}
+        onChange={e => setCredentials({ ...credentials, email: e.target.value })}
+      />
+      <input
+        type="password"
+        value={credentials.password}
+        onChange={e => setCredentials({ ...credentials, password: e.target.value })}
+      />
+      <button type="submit">Login</button>
+    </form>
+  )
+}
+```
+
+## usePathname
+
+Returns the current pathname without query string or hash.
+
+### Signature
+
+```typescript
+function usePathname(): string
+```
+
+<ResponseField name="pathname" type="string">
+  The current pathname (e.g., `/users/123` from `/users/123?tab=profile#section`).
+</ResponseField>
+
+### Usage
+
+```javascript
+import { usePathname } from '@ryunixjs/core'
+
+const Breadcrumbs = () => {
+  const pathname = usePathname()
+  const segments = pathname.split('/').filter(Boolean)
+
+  return (
+    <div>
+      <a href="/">Home</a>
+      {segments.map((segment, i) => {
+        const path = '/' + segments.slice(0, i + 1).join('/')
+        return (
+          <span key={path}>
+            {' / '}
+            <a href={path}>{segment}</a>
+          </span>
+        )
+      })}
+    </div>
+  )
+}
+
+// URL: /users/123/posts
+// Output: Home / users / 123 / posts
+```
+
+## useSearchParams
+
+Returns a `URLSearchParams` object for working with query strings.
+
+### Signature
+
+```typescript
+function useSearchParams(): URLSearchParams
+```
+
+<ResponseField name="searchParams" type="URLSearchParams">
+  Standard `URLSearchParams` object for reading and manipulating query parameters.
+</ResponseField>
+
+### Usage
+
+```javascript
+import { useSearchParams } from '@ryunixjs/core'
+
+const FilterPanel = () => {
+  const searchParams = useSearchParams()
+  const category = searchParams.get('category') || 'all'
+  const sort = searchParams.get('sort') || 'recent'
+
+  // Get all values for a parameter
+  const tags = searchParams.getAll('tag')
+
+  return (
+    <div>
+      <div>Category: {category}</div>
+      <div>Sort: {sort}</div>
+      <div>Tags: {tags.join(', ')}</div>
+    </div>
+  )
+}
+
+// URL: /products?category=electronics&sort=price&tag=sale&tag=new
+// category = "electronics"
+// sort = "price"
+// tags = ["sale", "new"]
+```
+
+## useHash
+
+Returns the current URL hash and updates reactively on hash changes.
+
+### Signature
+
+```typescript
+function useHash(): string
+```
+
+<ResponseField name="hash" type="string">
+  The current URL hash including the `#` character (e.g., `#section-2`).
+</ResponseField>
+
+### Usage
+
+```javascript
+import { useHash, useEffect } from '@ryunixjs/core'
+
+const TableOfContents = () => {
+  const hash = useHash()
+
+  useEffect(() => {
+    if (hash) {
+      const id = hash.slice(1) // Remove #
+      const element = document.getElementById(id)
+      if (element) {
+        element.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }
+    }
+  }, [hash])
+
+  return (
+    <nav>
+      <a href="#introduction" className={hash === '#introduction' ? 'active' : ''}>
+        Introduction
+      </a>
+      <a href="#getting-started" className={hash === '#getting-started' ? 'active' : ''}>
+        Getting Started
+      </a>
+      <a href="#examples" className={hash === '#examples' ? 'active' : ''}>
+        Examples
+      </a>
+    </nav>
+  )
+}
+```
+
+## RouterProvider
+
+Root component that enables routing for the application.
+
+### Signature
+
+```typescript
+function RouterProvider({ routes, children }): Element
+```
+
+<ParamField path="routes" type="Route[]" required>
+  Array of route objects defining the application's routes.
+</ParamField>
+
+<ParamField path="children" type="ReactNode" required>
+  Child components (typically the app content or `Children` component).
+</ParamField>
+
+### Usage
+
+```javascript
+import { RouterProvider, Children } from '@ryunixjs/core'
+import { Home, About, UserProfile, NotFound } from './pages'
+
+const routes = [
+  { path: '/', component: Home },
+  { path: '/about', component: About },
+  { path: '/users/:id', component: UserProfile },
+  { path: '/blog/:...slug', component: BlogPost }, // Catch-all
+  { NotFound } // 404 page
+]
+
+const App = () => {
+  return (
+    <RouterProvider routes={routes}>
+      <Children />
+    </RouterProvider>
+  )
+}
+```
+
+### Route Patterns
+
+#### Static Routes
+```javascript
+{ path: '/', component: Home }
+{ path: '/about', component: About }
+```
+
+#### Dynamic Segments
+```javascript
+{ path: '/users/:id', component: UserProfile }
+// /users/123 → params.id = "123"
+
+{ path: '/posts/:category/:slug', component: Post }
+// /posts/tech/react-intro → params = { category: "tech", slug: "react-intro" }
+```
+
+#### Catch-all Routes
+```javascript
+{ path: '/docs/:...slug', component: Docs }
+// /docs/api/hooks/use-store → params.slug = ["api", "hooks", "use-store"]
+```
+
+#### Not Found
+```javascript
+{ NotFound: NotFoundPage }
+// Matches when no other route matches
+```
+
+## Link Component
+
+Declarative navigation component for SPA routing.
+
+### Usage
+
+```javascript
+import { Link } from '@ryunixjs/core'
+
+const Navigation = () => {
+  return (
+    <nav>
+      <Link to="/">Home</Link>
+      <Link to="/about">About</Link>
+      <Link to="/contact" prefetch={false}>Contact</Link>
+    </nav>
+  )
+}
+```
+
+<ParamField path="to" type="string" required>
+  The destination path.
+</ParamField>
+
+<ParamField path="prefetch" type="boolean">
+  Whether to prefetch the route component on hover. Defaults to `true`.
+</ParamField>
+
+## NavLink Component
+
+Link component with active state styling.
+
+### Usage
+
+```javascript
+import { NavLink } from '@ryunixjs/core'
+
+const Menu = () => {
+  return (
+    <nav>
+      <NavLink
+        to="/"
+        exact
+        className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}
+      >
+        Home
+      </NavLink>
+      <NavLink
+        to="/dashboard"
+        className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}
+      >
+        Dashboard
+      </NavLink>
+    </nav>
+  )
+}
+```
+
+<ParamField path="to" type="string" required>
+  The destination path.
+</ParamField>
+
+<ParamField path="exact" type="boolean">
+  If `true`, the link is only active when the location exactly matches. If `false`, it's active when the location starts with the path. Defaults to `false`.
+</ParamField>
+
+<ParamField path="className" type="string | ({isActive: boolean}) => string">
+  CSS class name. Can be a string or a function that receives `isActive` state.
+</ParamField>
+
+## Multi-Page Application Mode
+
+RyunixJS supports MPA mode by setting `window.__RYUNIX_MPA__`:
+
+```javascript
+// In your build configuration or entry point
+window.__RYUNIX_MPA__ = true
+
+// Navigation will use window.location.assign instead of pushState
+const { navigate } = useRouter()
+navigate('/about') // Full page reload
+```
+
+## Server-Side Rendering
+
+During SSR, the router uses the server's pathname:
+
+```javascript
+// Server-side
+const location = '/' // Or from request URL
+```
+
+## Related Hooks
+
+- [useEffect](/api/hooks/use-effect) - For scroll behavior on route changes
+- [useMetadata](/api/hooks/use-metadata) - For updating page metadata per route
+- [useStore](/api/hooks/use-store) - For managing navigation state

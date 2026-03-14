@@ -1,0 +1,284 @@
+---
+title: "Profiler"
+description: "Performance profiling tools for measuring and optimizing render times"
+---
+
+## profiler
+
+Global profiler instance for measuring component render performance. Only enabled in non-production environments.
+
+```javascript
+import { profiler } from '@ryunixjs/core'
+```
+
+### Methods
+
+#### startMeasure
+
+Begins measuring performance for a named operation.
+
+```javascript
+profiler.startMeasure(name)
+```
+
+<ParamField path="name" type="string" required>
+  Unique identifier for the measurement
+</ParamField>
+
+#### endMeasure
+
+Ends a measurement and returns the duration.
+
+```javascript
+const duration = profiler.endMeasure(name)
+```
+
+<ParamField path="name" type="string" required>
+  Name of the measurement to end (must match a previous `startMeasure` call)
+</ParamField>
+
+<ResponseField name="return" type="number">
+  Duration in milliseconds, or `undefined` if profiler is disabled or measurement not found
+</ResponseField>
+
+#### recordRender
+
+Records a component render with its duration.
+
+```javascript
+profiler.recordRender(componentName, duration)
+```
+
+<ParamField path="componentName" type="string" required>
+  Name of the component that rendered
+</ParamField>
+
+<ParamField path="duration" type="number" required>
+  Render duration in milliseconds
+</ParamField>
+
+#### getStats
+
+Returns aggregated statistics for all recorded renders.
+
+```javascript
+const stats = profiler.getStats()
+```
+
+<ResponseField name="return" type="Object | null">
+  Statistics object or `null` if profiler is disabled:
+  
+  ```javascript
+  {
+    total: number,    // Total time across all renders
+    avg: number,      // Average render time
+    max: number,      // Maximum render time
+    min: number,      // Minimum render time
+    count: number     // Number of renders recorded
+  }
+  ```
+</ResponseField>
+
+#### getSlowestComponents
+
+Returns the slowest components by average render time.
+
+```javascript
+const slowest = profiler.getSlowestComponents(limit)
+```
+
+<ParamField path="limit" type="number" default="10">
+  Maximum number of components to return
+</ParamField>
+
+<ResponseField name="return" type="Array">
+  Array of component statistics sorted by average render time (slowest first):
+  
+  ```javascript
+  [
+    {
+      name: string,    // Component name
+      avg: number,     // Average render time
+      max: number,     // Maximum render time
+      count: number    // Number of renders
+    }
+  ]
+  ```
+</ResponseField>
+
+#### logStats
+
+Logs performance statistics to the console.
+
+```javascript
+profiler.logStats()
+```
+
+Outputs:
+- Total number of renders
+- Average render time
+- Min and max render times
+- Top 5 slowest components
+
+#### clear
+
+Clears all recorded measurements and render times.
+
+```javascript
+profiler.clear()
+```
+
+#### enable / disable
+
+Manually enable or disable the profiler.
+
+```javascript
+profiler.enable()
+profiler.disable()
+```
+
+### Example
+
+```javascript
+import { profiler } from '@ryunixjs/core'
+
+// Manual measurement
+profiler.startMeasure('data-processing')
+processData()
+const duration = profiler.endMeasure('data-processing')
+console.log(`Processing took ${duration}ms`)
+
+// View statistics
+const stats = profiler.getStats()
+console.log(`Average render: ${stats.avg}ms`)
+
+// Find slow components
+const slowest = profiler.getSlowestComponents(5)
+slowtest.forEach(comp => {
+  console.log(`${comp.name}: ${comp.avg}ms avg`)
+})
+
+// Log all stats
+profiler.logStats()
+
+// Clear data
+profiler.clear()
+```
+
+---
+
+## useProfiler
+
+Hook for profiling component render times. Returns a cleanup function to record the render duration.
+
+```javascript
+import { useProfiler } from '@ryunixjs/core'
+
+const endProfile = useProfiler(componentName)
+```
+
+<ParamField path="componentName" type="string" required>
+  Name of the component being profiled
+</ParamField>
+
+<ResponseField name="return" type="Function">
+  Cleanup function that records the render duration when called
+</ResponseField>
+
+### Example
+
+```javascript
+import { useProfiler } from '@ryunixjs/core'
+import { useEffect } from '@ryunixjs/core'
+
+function MyComponent({ data }) {
+  const endProfile = useProfiler('MyComponent')
+
+  useEffect(() => {
+    // Record render time when component finishes rendering
+    return endProfile
+  })
+
+  return <div>{data}</div>
+}
+```
+
+---
+
+## withProfiler
+
+Higher-order component (HOC) that automatically profiles a component's render time.
+
+```javascript
+import { withProfiler } from '@ryunixjs/core'
+
+const ProfiledComponent = withProfiler(Component, name)
+```
+
+<ParamField path="Component" type="Function" required>
+  Component to profile
+</ParamField>
+
+<ParamField path="name" type="string" required>
+  Name to use for profiling measurements
+</ParamField>
+
+<ResponseField name="return" type="Function">
+  Wrapped component that automatically measures render time
+</ResponseField>
+
+### Example
+
+```javascript
+import { withProfiler } from '@ryunixjs/core'
+
+const ExpensiveComponent = ({ data }) => {
+  // Complex rendering logic
+  return <div>{processData(data)}</div>
+}
+
+// Wrap with profiler
+const ProfiledExpensiveComponent = withProfiler(
+  ExpensiveComponent,
+  'ExpensiveComponent'
+)
+
+// Use normally - renders are automatically profiled
+function App() {
+  return <ProfiledExpensiveComponent data={data} />
+}
+```
+
+### Analyzing Performance
+
+```javascript
+import { profiler, withProfiler } from '@ryunixjs/core'
+
+const ProfiledList = withProfiler(List, 'List')
+const ProfiledItem = withProfiler(Item, 'Item')
+
+function App() {
+  // After some renders...
+  useEffect(() => {
+    // Log performance stats
+    profiler.logStats()
+    
+    // Get slowest components
+    const slowest = profiler.getSlowestComponents()
+    console.log('Optimize these:', slowest)
+  }, [])
+
+  return (
+    <ProfiledList>
+      <ProfiledItem />
+    </ProfiledList>
+  )
+}
+```
+
+### Notes
+
+- Profiler is automatically disabled in production (`process.env.NODE_ENV === 'production'`)
+- Maximum of 100 samples are kept (oldest are discarded)
+- Uses `performance.now()` for accurate timing, falls back to `Date.now()` in Node.js
+- No performance impact in production builds

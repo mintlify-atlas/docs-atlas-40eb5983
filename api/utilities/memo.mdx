@@ -1,0 +1,129 @@
+---
+title: "memo"
+description: "Memoize components to prevent unnecessary re-renders"
+---
+
+## memo
+
+Memoizes a component to prevent re-rendering when props haven't changed.
+
+```javascript
+import { memo } from '@ryunixjs/core'
+
+const MemoizedComponent = memo(MyComponent, arePropsEqual)
+```
+
+<ParamField path="Component" type="Function" required>
+  The component function to memoize
+</ParamField>
+
+<ParamField path="arePropsEqual" type="Function" default="shallowEqual">
+  Custom comparison function to determine if props are equal. Defaults to `shallowEqual`.
+  
+  Function signature: `(prevProps, nextProps) => boolean`
+</ParamField>
+
+<ResponseField name="return" type="Function">
+  Returns a memoized version of the component that only re-renders when props change
+</ResponseField>
+
+### Example
+
+```javascript
+import { memo } from '@ryunixjs/core'
+
+const ExpensiveComponent = ({ data, userId }) => {
+  // Expensive rendering logic
+  return <div>{data}</div>
+}
+
+// Using default shallow comparison
+const MemoizedComponent = memo(ExpensiveComponent)
+
+// Using custom comparison
+const CustomMemoized = memo(ExpensiveComponent, (prev, next) => {
+  return prev.userId === next.userId
+})
+```
+
+---
+
+## shallowEqual
+
+Performs a shallow comparison of two objects by comparing their keys and values using `Object.is`.
+
+```javascript
+import { shallowEqual } from '@ryunixjs/core'
+
+const areEqual = shallowEqual(prevProps, nextProps)
+```
+
+<ParamField path="prevProps" type="Object" required>
+  Previous props object to compare
+</ParamField>
+
+<ParamField path="nextProps" type="Object" required>
+  Next props object to compare
+</ParamField>
+
+<ResponseField name="return" type="boolean">
+  Returns `true` if objects have the same keys and all values are equal (using `Object.is`), `false` otherwise
+</ResponseField>
+
+### Example
+
+```javascript
+import { shallowEqual } from '@ryunixjs/core'
+
+const prev = { name: 'Alice', age: 30 }
+const next = { name: 'Alice', age: 30 }
+
+shallowEqual(prev, next) // true
+
+const different = { name: 'Bob', age: 30 }
+shallowEqual(prev, different) // false
+```
+
+---
+
+## deepEqual
+
+Performs a deep recursive comparison of two objects or values.
+
+```javascript
+import { deepEqual } from '@ryunixjs/core'
+
+const areEqual = deepEqual(a, b)
+```
+
+<ParamField path="a" type="any" required>
+  First value to compare
+</ParamField>
+
+<ParamField path="b" type="any" required>
+  Second value to compare
+</ParamField>
+
+<ResponseField name="return" type="boolean">
+  Returns `true` if values are deeply equal, `false` otherwise
+</ResponseField>
+
+### Example
+
+```javascript
+import { deepEqual } from '@ryunixjs/core'
+
+const obj1 = { user: { name: 'Alice', settings: { theme: 'dark' } } }
+const obj2 = { user: { name: 'Alice', settings: { theme: 'dark' } } }
+
+deepEqual(obj1, obj2) // true
+
+// Use with memo for deep prop comparison
+const DeepMemoized = memo(MyComponent, deepEqual)
+```
+
+### Notes
+
+- `shallowEqual` is more performant and should be used by default
+- Use `deepEqual` only when you have nested objects that need deep comparison
+- `deepEqual` performs recursive comparison which can impact performance with large objects

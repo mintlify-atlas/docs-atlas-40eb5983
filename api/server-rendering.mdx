@@ -1,0 +1,353 @@
+---
+title: 'Server-Side Rendering'
+description: 'Render Ryunix applications to static HTML strings and streams'
+---
+
+## renderToString
+
+The `renderToString` function renders a Ryunix element to a static HTML string. This is useful for server-side rendering (SSR) where you need to generate complete HTML upfront.
+
+```javascript
+import { renderToString } from 'ryunixjs/server'
+```
+
+### Function Signature
+
+```javascript
+const renderToString = (element)
+```
+
+<ParamField path="element" type="object" required>
+  The Ryunix element to render to HTML. Can be:
+  - Virtual DOM elements
+  - Function components
+  - Fragments
+  - Arrays of elements
+</ParamField>
+
+<ResponseField name="html" type="string">
+  Returns a complete HTML string representation of the element tree.
+</ResponseField>
+
+### Examples
+
+#### Basic SSR
+
+```javascript
+import { renderToString } from 'ryunixjs/server'
+import { createElement } from 'ryunixjs'
+
+const App = () => {
+  return createElement('div', { className: 'app' }, 'Hello, Server!')
+}
+
+const html = renderToString(createElement(App))
+console.log(html) // <div class="app">Hello, Server!</div>
+```
+
+#### With JSX
+
+```jsx
+import { renderToString } from 'ryunixjs/server'
+
+const App = () => {
+  return (
+    <div className="container">
+      <h1>Welcome</h1>
+      <p>This is server-rendered content</p>
+    </div>
+  )
+}
+
+const html = renderToString(<App />)
+```
+
+#### In a Node.js server
+
+```javascript
+import express from 'express'
+import { renderToString } from 'ryunixjs/server'
+import { App } from './App'
+
+const server = express()
+
+server.get('/', (req, res) => {
+  const html = renderToString(<App />)
+  res.send(`
+    <!DOCTYPE html>
+    <html>
+      <body>
+        <div id="root">${html}</div>
+        <script src="/client.js"></script>
+      </body>
+    </html>
+  `)
+})
+
+server.listen(3000)
+```
+
+### Rendering Features
+
+#### HTML Escaping
+
+All text content and attribute values are automatically escaped to prevent XSS attacks:
+
+```jsx
+const element = <div title="<script>alert('xss')</script>">{'<unsafe>'}</div>
+// Renders: <div title="&lt;script&gt;alert('xss')&lt;/script&gt;">&lt;unsafe&gt;</div>
+```
+
+#### Style Objects
+
+CSS style objects are converted to inline style strings:
+
+```jsx
+const element = <div style={{ backgroundColor: 'red', fontSize: '16px' }}>Styled</div>
+// Renders: <div style="background-color:red;font-size:16px">Styled</div>
+```
+
+#### Class Names
+
+Both `className` and legacy `class` props are supported:
+
+```jsx
+const element = <div className="container primary">Content</div>
+// Renders: <div class="container primary">Content</div>
+```
+
+#### Void Elements
+
+Self-closing elements are rendered correctly:
+
+```jsx
+const element = <input type="text" value="hello" />
+// Renders: <input type="text" value="hello" />
+```
+
+#### Fragments
+
+Fragments render their children without a wrapper:
+
+```jsx
+import { Fragment } from 'ryunixjs'
+
+const element = (
+  <Fragment>
+    <li>Item 1</li>
+    <li>Item 2</li>
+  </Fragment>
+)
+// Renders: <li>Item 1</li><li>Item 2</li>
+```
+
+#### Islands Architecture
+
+Components marked with `ryunix_client_id` are wrapped in island containers:
+
+```javascript
+// Component with client ID
+const Counter = (props) => <div>Count: {props.count}</div>
+Counter.ryunix_client_id = 'Counter'
+
+const html = renderToString(<Counter count={0} />)
+// Renders: <div data-ryunix-island="Counter" data-props='{"count":0}'><div>Count: 0</div></div>
+```
+
+---
+
+## renderToReadableStream
+
+The `renderToReadableStream` function renders a Ryunix element to a Web ReadableStream, enabling progressive HTML streaming with support for Suspense boundaries.
+
+```javascript
+import { renderToReadableStream } from 'ryunixjs/server'
+```
+
+### Function Signature
+
+```javascript
+const renderToReadableStream = (element)
+```
+
+<ParamField path="element" type="object" required>
+  The Ryunix element to render as a stream. Supports all element types including async components and Suspense.
+</ParamField>
+
+<ResponseField name="stream" type="ReadableStream">
+  Returns a Web ReadableStream that progressively emits HTML chunks.
+</ResponseField>
+
+### Examples
+
+#### Basic streaming
+
+```javascript
+import { renderToReadableStream } from 'ryunixjs/server'
+
+const App = () => {
+  return <div>Streaming content</div>
+}
+
+const stream = renderToReadableStream(<App />)
+```
+
+#### With Node.js HTTP server
+
+```javascript
+import { createServer } from 'http'
+import { renderToReadableStream } from 'ryunixjs/server'
+import { App } from './App'
+
+const server = createServer(async (req, res) => {
+  res.setHeader('Content-Type', 'text/html')
+  
+  const stream = renderToReadableStream(<App />)
+  const reader = stream.getReader()
+  
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    res.write(value)
+  }
+  
+  res.end()
+})
+
+server.listen(3000)
+```
+
+#### With Express and streaming
+
+```javascript
+import express from 'express'
+import { renderToReadableStream } from 'ryunixjs/server'
+import { Readable } from 'stream'
+
+const app = express()
+
+app.get('/', async (req, res) => {
+  res.setHeader('Content-Type', 'text/html')
+  
+  const webStream = renderToReadableStream(<App />)
+  const nodeStream = Readable.fromWeb(webStream)
+  
+  nodeStream.pipe(res)
+})
+
+app.listen(3000)
+```
+
+#### With Suspense boundaries
+
+```jsx
+import { renderToReadableStream } from 'ryunixjs/server'
+import { Suspense } from 'ryunixjs'
+
+const AsyncComponent = async () => {
+  const data = await fetch('https://api.example.com/data')
+  return <div>{data.title}</div>
+}
+
+const App = () => {
+  return (
+    <div>
+      <h1>My App</h1>
+      <Suspense fallback={<div>Loading...</div>}>
+        <AsyncComponent />
+      </Suspense>
+    </div>
+  )
+}
+
+const stream = renderToReadableStream(<App />)
+```
+
+### Streaming Features
+
+#### Progressive Rendering
+
+HTML is sent to the client as soon as it's ready, improving Time to First Byte (TTFB):
+
+```jsx
+const App = () => {
+  return (
+    <html>
+      <head><title>My App</title></head>
+      <body>
+        {/* This renders immediately */}
+        <header>Fast Header</header>
+        
+        {/* This streams when ready */}
+        <Suspense fallback={<div>Loading...</div>}>
+          <SlowContent />
+        </Suspense>
+      </body>
+    </html>
+  )
+}
+```
+
+#### Suspense Support
+
+Suspense boundaries render fallback content immediately and replace it when async content resolves:
+
+1. Initial stream includes fallback wrapped in special markers
+2. Async content renders in the background
+3. When ready, a `<template>` tag with the real content is streamed
+4. A `<script>` tag executes `$RC()` to replace the fallback
+
+```html
+<!-- Initial stream -->
+<script>function $RC(id, templateId) { /* ... */ }</script>
+<!--$?-->
+<template id="B:abc123"></template>
+<div id="S:abc123">Loading...</div>
+<!--$/-->
+
+<!-- After async content resolves -->
+<template id="P:abc123"><div>Real content</div></template>
+<script>$RC("S:abc123", "P:abc123")</script>
+```
+
+#### Async Components
+
+Async function components are automatically awaited:
+
+```jsx
+const UserProfile = async ({ userId }) => {
+  const user = await fetchUser(userId)
+  return <div>{user.name}</div>
+}
+
+const stream = renderToReadableStream(<UserProfile userId={123} />)
+```
+
+#### Context Providers
+
+Context providers work transparently during SSR:
+
+```jsx
+import { createContext } from 'ryunixjs'
+
+const ThemeContext = createContext('light')
+
+const App = () => {
+  return (
+    <ThemeContext.Provider value="dark">
+      <ThemedComponent />
+    </ThemeContext.Provider>
+  )
+}
+
+const stream = renderToReadableStream(<App />)
+```
+
+### Behavior Notes
+
+- **UTF-8 Encoding**: All text is encoded as UTF-8 using TextEncoder
+- **Error Handling**: Stream errors are properly propagated via `controller.error()`
+- **State Management**: Sets `isServerRendering` flag during rendering for conditional logic
+- **Event Handlers**: Event listeners (props starting with `on`) are ignored during SSR
+- **Metadata**: SSR metadata is stored in global state for debugging and optimization
+- **Script Injection**: Automatically injects the `$RC` helper script for Suspense hydration

@@ -1,0 +1,502 @@
+---
+title: Islands & Hydration
+description: Implement partial hydration with island architecture for optimal performance and minimal JavaScript
+---
+
+RyunixJS supports the Islands Architecture pattern, enabling you to ship minimal JavaScript by only hydrating specific interactive components while keeping the rest of your page static HTML.
+
+## Island Architecture Overview
+
+Islands Architecture is a pattern where you have "islands" of interactivity in a sea of static HTML. This dramatically reduces JavaScript bundle size and improves performance.
+
+**Benefits:**
+- Minimal JavaScript shipped to client
+- Faster initial page loads
+- Better Core Web Vitals scores
+- Independent component hydration
+- Reduced time to interactive
+
+## Creating Islands
+
+Mark components as islands using the `island()` function from the webpack plugin:
+
+```javascript
+import { island } from '@unsetsoft/ryunix-webpack'
+import { useStore } from '@unsetsoft/ryunixjs'
+
+// Interactive counter island
+const Counter = island(({ initialCount = 0 }) => {
+  const [count, setCount] = useStore(initialCount)
+  
+  return (
+    <div>
+      <p>Count: {count}</p>
+      <button onClick={() => setCount(count + 1)}>Increment</button>
+    </div>
+  )
+}, 'Counter')
+
+export default Counter
+```
+
+The second parameter is a unique identifier for the island component.
+
+## Island Rendering
+
+### Server-Side
+
+During SSR, islands are marked with special attributes:
+
+```javascript
+import { renderToString } from '@unsetsoft/ryunixjs'
+
+const html = renderToString(<Counter initialCount={5} />)
+```
+
+Rendered HTML:
+
+```html
+<div data-ryunix-island="Counter" data-props='{"initialCount":5}'>
+  <div>
+    <p>Count: 5</p>
+    <button>Increment</button>
+  </div>
+</div>
+```
+
+Source: `packages/core/src/lib/server.js:79-85`
+
+### Client-Side
+
+Islands are hydrated independently:
+
+```javascript
+import { hydrateIslands } from '@unsetsoft/ryunixjs'
+import Counter from './Counter'
+
+// Register islands
+const islands = {
+  Counter: Counter
+}
+
+// Hydrate all islands on the page
+hydrateIslands(islands)
+```
+
+Source: `packages/core/src/lib/render.js:80-107`
+
+## Hydration Process
+
+### Standard Hydration
+
+Hydrate an entire application:
+
+```javascript
+import { hydrate } from '@unsetsoft/ryunixjs'
+import App from './App'
+
+// Hydrate the entire app
+const container = document.getElementById('root')
+hydrate(<App />, container)
+```
+
+Source: `packages/core/src/lib/render.js:50-67`
+
+**Hydration Steps:**
+1. Walks existing server-rendered DOM
+2. Matches virtual DOM to real DOM nodes
+3. Attaches event listeners
+4. Initializes state
+5. Preserves existing HTML (no re-render)
+
+### Hydrate Cursor
+
+Ryunix uses a "hydrate cursor" to efficiently match DOM nodes:
+
+```javascript
+const nextValidSibling = (node) => {
+  let next = node
+  // Skip whitespace text nodes and comments
+  while (next && (
+    next.nodeType === 3 && !next.nodeValue.trim() ||
+    next.nodeType === 8
+  )) {
+    next = next.nextSibling
+  }
+  return next
+}
+```
+
+Source: `packages/core/src/lib/render.js:37-43`
+
+### Hydration Mismatch Handling
+
+If server and client trees don't match, Ryunix falls back to client-side rendering:
+
+```javascript
+const isText = fiber.type === RYUNIX_TYPES.TEXT_ELEMENT && domNode.nodeType === 3
+const isElement = typeof fiber.type === 'string' &&
+  domNode.nodeType === 1 &&
+  domNode.tagName.toLowerCase() === fiber.type.toLowerCase()
+
+if (isText || isElement) {
+  fiber.dom = domNode
+  fiber.effectTag = EFFECT_TAGS.HYDRATE
+  state.hydrateCursor = nextValidSibling(domNode.firstChild)
+} else {
+  // Mismatch - fall back to CSR
+  console.warn('[Hydration] Mismatch detected. Falling back to CSR.')
+  state.isHydrating = false
+  fiber.dom = createDom(fiber)
+  fiber.effectTag = EFFECT_TAGS.PLACEMENT
+}
+```
+
+Source: `packages/core/src/lib/components.js:52-79`
+
+<Warning>
+  Hydration mismatches occur when server and client render different content. Always ensure deterministic rendering - avoid using `Date.now()`, `Math.random()`, or other non-deterministic values during SSR.
+</Warning>
+
+## Island Hydration
+
+### hydrateIslands
+
+The `hydrateIslands()` function scans the page for island markers:
+
+```javascript
+const hydrateIslands = (components = {}, hasMainElement = false) => {
+  if (typeof window === 'undefined') return
+  
+  const elements = document.querySelectorAll('[data-ryunix-island]')
+  const globalRegistry = window.__RYUNIX_ISLANDS__ || {}
+  
+  elements.forEach((container) => {
+    // Skip islands inside ServerBoundary if main element exists
+    if (hasMainElement && container.closest('[data-ryunix-server]')) {
+      return
+    }
+    
+    const id = container.getAttribute('data-ryunix-island')
+    const Component = components[id] || globalRegistry[id]
+    
+    if (!Component) {
+      console.warn(`Component "${id}" not found in registry.`)
+      return
+    }
+    
+    try {
+      const props = JSON.parse(container.getAttribute('data-props') || '{}')
+      hydrate(createElement(Component, props), container)
+    } catch (e) {
+      console.error(`Error hydrating island "${id}":`, e)
+    }
+  })
+}
+```
+
+Source: `packages/core/src/lib/render.js:80-107`
+
+### Global Registry
+
+Register islands globally for automatic hydration:
+
+```javascript
+// Register in global scope
+window.__RYUNIX_ISLANDS__ = {
+  Counter: Counter,
+  Newsletter: Newsletter,
+  CommentSection: CommentSection
+}
+
+// Hydrate all registered islands
+import { hydrateIslands } from '@unsetsoft/ryunixjs'
+hydrateIslands()
+```
+
+## Smart Initialization
+
+The `init()` function automatically detects SSR content and chooses hydration or rendering:
+
+```javascript
+import { init } from '@unsetsoft/ryunixjs'
+import App from './App'
+import * as islands from './islands'
+
+// Automatically detects if SSR content exists
+init(<App />, 'root', islands)
+```
+
+**Detection Logic:**
+
+```javascript
+if (process.env.RYUNIX_SSR && containerRoot.hasChildNodes()) {
+  // Server-rendered content detected - hydrate
+  hydrate(MainElement, containerRoot)
+  hydrateIslands(components, !!MainElement)
+} else {
+  // No SSR - normal render
+  render(MainElement, containerRoot)
+  hydrateIslands(components)
+}
+```
+
+Source: `packages/core/src/lib/render.js:121-135`
+
+<Tip>
+  The `init()` function is the recommended way to bootstrap your app. It handles SSR detection, hydration, and island initialization automatically.
+</Tip>
+
+## Server Boundaries with Islands
+
+Combine ServerBoundary with islands to prevent double hydration:
+
+```javascript
+import { ServerBoundary } from '@unsetsoft/ryunixjs'
+import { island } from '@unsetsoft/ryunix-webpack'
+
+const Comments = island(({ postId }) => {
+  const [comments, setComments] = useStore([])
+  // Interactive comment section
+  return <div>{/* ... */}</div>
+}, 'Comments')
+
+const BlogPost = ({ content, postId }) => (
+  <article>
+    {/* Static content - not hydrated */}
+    <ServerBoundary id="post-content">
+      <div dangerouslySetInnerHTML={{ __html: content }} />
+    </ServerBoundary>
+    
+    {/* Interactive island - hydrated */}
+    <Comments postId={postId} />
+  </article>
+)
+```
+
+If the main app is being hydrated, islands inside `ServerBoundary` are skipped:
+
+```javascript
+if (hasMainElement && container.closest('[data-ryunix-server]')) {
+  return // Skip hydration
+}
+```
+
+## Lazy Loading Islands
+
+Combine islands with code splitting for maximum optimization:
+
+```javascript
+import { lazy, Suspense } from '@unsetsoft/ryunixjs'
+import { island } from '@unsetsoft/ryunix-webpack'
+
+// Lazy load the island component
+const HeavyChart = island(
+  lazy(() => import('./HeavyChart')),
+  'HeavyChart'
+)
+
+const Dashboard = () => (
+  <div>
+    <h1>Dashboard</h1>
+    
+    {/* Only loads when rendered */}
+    <Suspense fallback={<div>Loading chart...</div>}>
+      <HeavyChart data={chartData} />
+    </Suspense>
+  </div>
+)
+```
+
+## Prop Serialization
+
+Island props are serialized to JSON during SSR:
+
+```javascript
+// Server
+const serializedProps = JSON.stringify(props)
+
+// Rendered
+<div data-ryunix-island="MyIsland" data-props='{"count":5,"name":"test"}'>
+```
+
+**Serialization Rules:**
+- Primitives: strings, numbers, booleans, null
+- Objects and arrays
+- Functions: **not serialized** (will be undefined on client)
+- Class instances: serialized as plain objects
+
+<Warning>
+  Don't pass functions, symbols, or class instances as island props. They cannot be serialized and will be lost during hydration.
+</Warning>
+
+### Complex Prop Handling
+
+```javascript
+// ❌ Bad: Functions can't be serialized
+<MyIsland onClick={() => alert('hi')} />
+
+// ✅ Good: Pass data only
+<MyIsland itemId="123" />
+
+// Then handle in the component
+const MyIsland = island(({ itemId }) => {
+  const handleClick = () => {
+    // Define function in component
+    alert(`Clicked ${itemId}`)
+  }
+  return <button onClick={handleClick}>Click</button>
+}, 'MyIsland')
+```
+
+## Best Practices
+
+### 1. Minimize Island Count
+
+```javascript
+// ❌ Bad: Too many small islands
+<div>
+  <IslandButton1 />
+  <IslandButton2 />
+  <IslandButton3 />
+</div>
+
+// ✅ Good: One island containing multiple buttons
+<ButtonGroup />
+```
+
+### 2. Use ServerBoundary for Static Content
+
+```javascript
+// ✅ Optimal: Mix static and interactive
+const Page = () => (
+  <>
+    <ServerBoundary id="header">
+      <Header /> {/* Static */}
+    </ServerBoundary>
+    
+    <SearchBar /> {/* Island - interactive */}
+    
+    <ServerBoundary id="content">
+      <ArticleContent /> {/* Static */}
+    </ServerBoundary>
+  </>
+)
+```
+
+### 3. Only Hydrate What's Necessary
+
+```javascript
+// ❌ Bad: Hydrating everything
+init(<App />, 'root')
+
+// ✅ Good: Only hydrate interactive parts
+const islands = {
+  SearchBar,
+  CommentForm,
+  ShareButtons
+}
+hydrateIslands(islands)
+// Rest of the page stays static HTML
+```
+
+### 4. Handle Hydration Errors Gracefully
+
+```javascript
+import { ErrorBoundary } from '@unsetsoft/ryunixjs'
+
+const App = () => (
+  <ErrorBoundary fallback={<div>Something went wrong</div>}>
+    <MyIsland />
+  </ErrorBoundary>
+)
+```
+
+## Performance Optimization
+
+### Measure Island Impact
+
+```javascript
+import { profiler } from '@unsetsoft/ryunixjs'
+
+const MyIsland = island(({ data }) => {
+  const endProfile = useProfiler('MyIsland')
+  
+  // Component logic
+  
+  return <div>{/* ... */}</div>
+}, 'MyIsland')
+
+// Check performance
+profiler.logStats()
+```
+
+### Progressive Enhancement
+
+Make islands work without JavaScript:
+
+```javascript
+const SearchForm = island(({ action }) => {
+  const [query, setQuery] = useStore('')
+  
+  const handleSubmit = (e) => {
+    e.preventDefault()
+    // Client-side search
+    performSearch(query)
+  }
+  
+  // Falls back to form submission if JS disabled
+  return (
+    <form action={action} method="GET" onSubmit={handleSubmit}>
+      <input name="q" value={query} onChange={(e) => setQuery(e.target.value)} />
+      <button type="submit">Search</button>
+    </form>
+  )
+}, 'SearchForm')
+```
+
+## Common Patterns
+
+### Multi-Page Islands
+
+```javascript
+// layout.html
+<body>
+  <header data-ryunix-island="Header" data-props='{}'></header>
+  <main id="content">
+    <!-- Page content -->
+  </main>
+  <footer data-ryunix-island="Footer" data-props='{}'></footer>
+  
+  <script src="/islands.js"></script>
+</body>
+```
+
+```javascript
+// islands.js
+import { hydrateIslands } from '@unsetsoft/ryunixjs'
+import Header from './Header'
+import Footer from './Footer'
+
+hydrateIslands({ Header, Footer })
+```
+
+### Conditional Island Hydration
+
+```javascript
+// Only hydrate on interaction
+const lazyHydrate = (selector, Component) => {
+  const element = document.querySelector(selector)
+  
+  const hydrateOnEvent = () => {
+    hydrate(<Component />, element)
+    element.removeEventListener('mouseenter', hydrateOnEvent)
+    element.removeEventListener('focus', hydrateOnEvent)
+  }
+  
+  element.addEventListener('mouseenter', hydrateOnEvent)
+  element.addEventListener('focus', hydrateOnEvent)
+}
+
+lazyHydrate('[data-island="chart"]', Chart)
+```

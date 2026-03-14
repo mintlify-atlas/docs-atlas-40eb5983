@@ -1,0 +1,276 @@
+---
+title: "useMemo & useCallback"
+description: "Performance optimization through memoization"
+---
+
+## useMemo
+
+Memoizes an expensive computation based on an array of dependencies. The memoized value is only recalculated when dependencies change.
+
+### Signature
+
+```typescript
+function useMemo<T>(
+  compute: () => T,
+  deps: any[]
+): T
+```
+
+<ParamField path="compute" type="() => T" required>
+  A function that computes the value to memoize. This function must be pure and should not have side effects.
+</ParamField>
+
+<ParamField path="deps" type="any[]" required>
+  Array of dependencies. The compute function only re-runs when any dependency has changed (using `Object.is` comparison). This parameter is required.
+</ParamField>
+
+<ResponseField name="value" type="T">
+  The memoized value returned by the compute function.
+</ResponseField>
+
+### Usage
+
+#### Expensive Calculations
+
+```javascript
+import { useMemo, useStore } from '@ryunixjs/core'
+
+const DataTable = ({ data }) => {
+  const [filter, setFilter] = useStore('')
+  const [sortBy, setSortBy] = useStore('name')
+
+  // Only recompute when data, filter, or sortBy changes
+  const processedData = useMemo(() => {
+    console.log('Computing filtered and sorted data...')
+    return data
+      .filter(item => item.name.includes(filter))
+      .sort((a, b) => a[sortBy].localeCompare(b[sortBy]))
+  }, [data, filter, sortBy])
+
+  return (
+    <div>
+      <input value={filter} onChange={e => setFilter(e.target.value)} />
+      {processedData.map(item => <div key={item.id}>{item.name}</div>)}
+    </div>
+  )
+}
+```
+
+#### Derived State
+
+```javascript
+const ShoppingCart = ({ items }) => {
+  const total = useMemo(() => {
+    return items.reduce((sum, item) => sum + item.price * item.quantity, 0)
+  }, [items])
+
+  const tax = useMemo(() => {
+    return total * 0.1
+  }, [total])
+
+  const finalPrice = useMemo(() => {
+    return total + tax
+  }, [total, tax])
+
+  return (
+    <div>
+      <div>Subtotal: ${total.toFixed(2)}</div>
+      <div>Tax: ${tax.toFixed(2)}</div>
+      <div>Total: ${finalPrice.toFixed(2)}</div>
+    </div>
+  )
+}
+```
+
+#### Object/Array Creation
+
+```javascript
+const UserProfile = ({ user }) => {
+  // Avoid recreating object on every render
+  const userContext = useMemo(() => ({
+    id: user.id,
+    name: user.name,
+    permissions: user.roles.map(r => r.permissions).flat()
+  }), [user.id, user.name, user.roles])
+
+  return <UserContext.Provider value={userContext}>...</UserContext.Provider>
+}
+```
+
+## useCallback
+
+Memoizes a function reference to prevent unnecessary child component re-renders. Implemented internally using `useMemo`.
+
+### Signature
+
+```typescript
+function useCallback<T extends Function>(
+  callback: T,
+  deps: any[]
+): T
+```
+
+<ParamField path="callback" type="Function" required>
+  The function to memoize. The same function reference is returned until dependencies change.
+</ParamField>
+
+<ParamField path="deps" type="any[]" required>
+  Array of dependencies. The callback is recreated when any dependency changes. This parameter is required.
+</ParamField>
+
+<ResponseField name="callback" type="Function">
+  The memoized function reference.
+</ResponseField>
+
+### Usage
+
+#### Preventing Child Re-renders
+
+```javascript
+import { useCallback, useStore } from '@ryunixjs/core'
+
+const TodoList = () => {
+  const [todos, setTodos] = useStore([])
+
+  // Without useCallback, this function is recreated on every render
+  // causing all TodoItem children to re-render
+  const handleToggle = useCallback((id) => {
+    setTodos(prev => prev.map(todo =>
+      todo.id === id ? { ...todo, done: !todo.done } : todo
+    ))
+  }, []) // setTodos is stable, so empty deps array
+
+  const handleDelete = useCallback((id) => {
+    setTodos(prev => prev.filter(todo => todo.id !== id))
+  }, [])
+
+  return (
+    <div>
+      {todos.map(todo => (
+        <TodoItem
+          key={todo.id}
+          todo={todo}
+          onToggle={handleToggle}
+          onDelete={handleDelete}
+        />
+      ))}
+    </div>
+  )
+}
+```
+
+#### With External Dependencies
+
+```javascript
+const SearchResults = ({ searchTerm, maxResults }) => {
+  const [results, setResults] = useStore([])
+
+  // Recreate callback when searchTerm or maxResults changes
+  const handleSearch = useCallback(async () => {
+    const response = await fetch(`/api/search?q=${searchTerm}&limit=${maxResults}`)
+    const data = await response.json()
+    setResults(data)
+  }, [searchTerm, maxResults])
+
+  return (
+    <div>
+      <button onClick={handleSearch}>Search</button>
+      {results.map(r => <div key={r.id}>{r.title}</div>)}
+    </div>
+  )
+}
+```
+
+#### Event Handlers
+
+```javascript
+const Form = () => {
+  const [formData, setFormData] = useStore({ name: '', email: '' })
+
+  const handleChange = useCallback((field) => (e) => {
+    setFormData(prev => ({ ...prev, [field]: e.target.value }))
+  }, [])
+
+  const handleSubmit = useCallback((e) => {
+    e.preventDefault()
+    console.log('Submitting:', formData)
+  }, [formData])
+
+  return (
+    <form onSubmit={handleSubmit}>
+      <input value={formData.name} onChange={handleChange('name')} />
+      <input value={formData.email} onChange={handleChange('email')} />
+      <button type="submit">Submit</button>
+    </form>
+  )
+}
+```
+
+## Error Handling
+
+```javascript
+// ❌ useMemo requires a function
+useMemo('not a function', [])
+
+// ❌ useMemo requires a dependencies array
+useMemo(() => expensiveCalculation())
+
+// ❌ useCallback requires a function
+useCallback('not a function', [])
+
+// ✅ Valid
+useMemo(() => expensiveCalculation(), [dep1, dep2])
+useCallback(() => handleClick(), [dep1, dep2])
+```
+
+Errors in the compute function are caught and logged in development:
+
+```javascript
+const result = useMemo(() => {
+  throw new Error('Computation failed')
+}, [])
+// Error is logged and re-thrown
+```
+
+## Implementation Detail
+
+`useCallback` is implemented as:
+
+```javascript
+const useCallback = (callback, deps) => {
+  return useMemo(() => callback, deps)
+}
+```
+
+## When to Use
+
+### useMemo
+- Expensive calculations that don't need to run on every render
+- Creating derived data from props or state
+- Preventing object/array recreation for context values
+- Optimizing list filtering, sorting, or transformation
+
+### useCallback
+- Passing callbacks to optimized child components
+- Preventing unnecessary effect re-runs that depend on callbacks
+- Event handlers passed to multiple children
+- Functions used as dependencies in other hooks
+
+### When NOT to Use
+- Simple calculations (memoization overhead may be worse than recalculating)
+- Functions that are only called once per render
+- Components that always re-render anyway
+
+## Behavior
+
+- During server-side rendering, `useMemo` always calls the compute function
+- Both hooks use `Object.is` to compare dependencies
+- Dependencies are compared against the previous render
+- Both hooks require valid component context (throw error otherwise)
+- Dependency arrays are required (unlike `useEffect`)
+
+## Related Hooks
+
+- [useEffect](/api/hooks/use-effect) - For side effects
+- [useStore](/api/hooks/use-store) - For state management
+- [useRef](/api/hooks/use-ref) - For mutable values that don't trigger re-renders

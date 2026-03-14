@@ -1,0 +1,263 @@
+---
+title: lazy
+description: Lazy load components with code splitting and Suspense integration
+---
+
+## Overview
+
+The `lazy` function enables code splitting by allowing you to dynamically import components only when they're needed. It integrates seamlessly with Suspense to provide loading states.
+
+Loaded modules are automatically cached, so subsequent renders are synchronous and don't trigger loading states again.
+
+## Import
+
+```javascript
+import { lazy } from 'ryunixjs'
+```
+
+## API
+
+### lazy()
+
+```javascript
+const LazyComponent = lazy(importFn)
+```
+
+<ParamField path="importFn" type="() => Promise<Component>" required>
+  A function that returns a dynamic `import()` promise. The imported module should have a `default` export or be the component itself.
+</ParamField>
+
+**Returns:** A lazy-loaded Ryunix component that can be rendered within a Suspense boundary.
+
+## Usage
+
+### Basic Lazy Loading
+
+```javascript
+import { lazy, Suspense } from 'ryunixjs'
+
+const MyComponent = lazy(() => import('./MyComponent.js'))
+
+function App() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <MyComponent />
+    </Suspense>
+  )
+}
+```
+
+### Multiple Lazy Components
+
+```javascript
+import { lazy, Suspense } from 'ryunixjs'
+
+const Header = lazy(() => import('./Header.js'))
+const Footer = lazy(() => import('./Footer.js'))
+const Sidebar = lazy(() => import('./Sidebar.js'))
+
+function App() {
+  return (
+    <div>
+      <Suspense fallback={<div>Loading header...</div>}>
+        <Header />
+      </Suspense>
+      
+      <main>
+        <Suspense fallback={<div>Loading sidebar...</div>}>
+          <Sidebar />
+        </Suspense>
+        <Content />
+      </main>
+      
+      <Suspense fallback={<div>Loading footer...</div>}>
+        <Footer />
+      </Suspense>
+    </div>
+  )
+}
+```
+
+### Passing Props to Lazy Components
+
+Lazy components accept props just like regular components:
+
+```javascript
+const UserProfile = lazy(() => import('./UserProfile.js'))
+
+function App() {
+  return (
+    <Suspense fallback={<div>Loading profile...</div>}>
+      <UserProfile userId={123} theme="dark" />
+    </Suspense>
+  )
+}
+```
+
+### Conditional Lazy Loading
+
+```javascript
+import { lazy, Suspense } from 'ryunixjs'
+import { useStore } from 'ryunixjs'
+
+const AdminPanel = lazy(() => import('./AdminPanel.js'))
+const UserDashboard = lazy(() => import('./UserDashboard.js'))
+
+function App() {
+  const [isAdmin] = useStore(false)
+  
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      {isAdmin ? <AdminPanel /> : <UserDashboard />}
+    </Suspense>
+  )
+}
+```
+
+## Component Lifecycle
+
+### Loading States
+
+Lazy components go through three states:
+
+1. **PENDING**: Initial state, component is being fetched
+2. **RESOLVED**: Component loaded successfully
+3. **REJECTED**: Component failed to load (throws error to ErrorBoundary)
+
+```javascript
+import { lazy, Suspense, ErrorBoundary } from 'ryunixjs'
+
+const LazyComponent = lazy(() => import('./Component.js'))
+
+function App() {
+  return (
+    <ErrorBoundary fallback={<div>Failed to load component</div>}>
+      <Suspense fallback={<div>Loading...</div>}>
+        <LazyComponent />
+      </Suspense>
+    </ErrorBoundary>
+  )
+}
+```
+
+### Caching Behavior
+
+Once a lazy component is loaded, it's cached in memory:
+
+```javascript
+const LazyComponent = lazy(() => import('./Component.js'))
+
+// First render: shows fallback, loads component
+// Second render: renders immediately (cached)
+// Third render: still cached, no loading
+```
+
+## Error Handling
+
+If the import fails, the error is thrown to the nearest ErrorBoundary:
+
+```javascript
+import { lazy, Suspense, ErrorBoundary } from 'ryunixjs'
+
+const LazyComponent = lazy(() => import('./NonExistent.js'))
+
+function App() {
+  return (
+    <ErrorBoundary 
+      fallback={(error) => (
+        <div>
+          <h1>Component failed to load</h1>
+          <p>{error.message}</p>
+        </div>
+      )}
+    >
+      <Suspense fallback={<div>Loading...</div>}>
+        <LazyComponent />
+      </Suspense>
+    </ErrorBoundary>
+  )
+}
+```
+
+## preload()
+
+Preload a component before it's rendered to reduce loading time:
+
+```javascript
+import { preload } from 'ryunixjs'
+
+const importFn = () => import('./HeavyComponent.js')
+
+// Preload on user interaction
+function App() {
+  const handleMouseEnter = () => {
+    preload(importFn)
+  }
+  
+  return (
+    <button onMouseEnter={handleMouseEnter}>
+      Hover to preload
+    </button>
+  )
+}
+```
+
+### preload() API
+
+```javascript
+preload(importFn)
+```
+
+<ParamField path="importFn" type="() => Promise<Component>" required>
+  The same dynamic import function you pass to `lazy()`. Starts the import immediately so it's cached when the component is rendered.
+</ParamField>
+
+**Returns:** Promise that resolves when the component is loaded.
+
+### Preload Patterns
+
+```javascript
+import { lazy, preload, Suspense } from 'ryunixjs'
+
+const importFn = () => import('./Dashboard.js')
+const Dashboard = lazy(importFn)
+
+function App() {
+  const [showDashboard, setShowDashboard] = useStore(false)
+  
+  // Preload on mount
+  useEffect(() => {
+    preload(importFn)
+  }, [])
+  
+  // Or preload on user intent
+  const handleButtonHover = () => {
+    preload(importFn)
+  }
+  
+  return (
+    <div>
+      <button 
+        onMouseEnter={handleButtonHover}
+        onClick={() => setShowDashboard(true)}
+      >
+        Show Dashboard
+      </button>
+      
+      {showDashboard && (
+        <Suspense fallback={<div>Loading...</div>}>
+          <Dashboard />
+        </Suspense>
+      )}
+    </div>
+  )
+}
+```
+
+## Implementation Details
+
+- Lazy components use `useStore` and `useEffect` internally to trigger re-renders when loading completes
+- Marked with `_isLazy` flag for Suspense detection
+- Expose `_getStatus()` method for status checking
+- Return `null` while pending, allowing Suspense to show fallback
+- Throw errors to nearest ErrorBoundary on rejection

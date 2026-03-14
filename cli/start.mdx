@@ -1,0 +1,172 @@
+---
+title: ryunix start
+description: Start the native Node.js production server
+---
+
+## Usage
+
+```bash
+ryunix start
+```
+
+Launches the highly optimized native Node.js production server.
+
+## Description
+
+The `start` command runs a lightweight, high-performance HTTP server that:
+
+- Serves the pre-built `.ryunix/static` bundle
+- Handles Server-Side Rendering (SSR)
+- Routes API requests to `.ryunix/server/api/`
+- Implements aggressive caching strategies
+- Supports HTTP/2, compression, and streaming
+
+## Prerequisites
+
+**You must build your application first:**
+
+```bash
+ryunix build
+ryunix start
+```
+
+If `.ryunix/static` doesn't exist, you'll see:
+
+```
+You need build first!
+```
+
+## Server Features
+
+### In-Memory Caching
+
+Implements a **50MB LRU-style cache** (`fileCache`) for static assets to avoid repetitive disk I/O.
+
+### Dynamic Compression
+
+Automatically detects the `Accept-Encoding` header and compresses text-based assets using:
+- **Brotli** (quality 6) - preferred
+- **Gzip** - fallback
+
+Compressed buffers are cached alongside raw content.
+
+### HTTP Range Requests
+
+Fully supports **HTTP 206 Partial Content** and `Range` headers, essential for:
+- `<video>` streaming
+- `<audio>` streaming
+- PDF viewing
+- Large file downloads
+
+### ETag Validation
+
+Generates MD5 hashes of file contents to serve `304 Not Modified` responses for aggressive browser caching.
+
+### API Routing
+
+Pipes `/api/*` requests directly through the `handleApiRequest` utility before attempting to serve static files.
+
+### SPA Fallback
+
+If a requested route isn't found as an `.html` file, the server securely falls back to serving `index.html`, allowing the client-side router to handle navigation.
+
+## Example Output
+
+```bash
+ryunix start
+```
+
+```
+╭──────── Production Server ──────────╮
+│                                     │
+│   <Ryunix/> v3.0.0                  │
+│                                     │
+│   Ready at: http://localhost:3000/ │
+│   Mode:     production              │
+│                                     │
+╰─────────────────────────────────────╯
+```
+
+## Environment
+
+Sets `RYUNIX_MODE=production` automatically.
+
+## Configuration
+
+The production server respects:
+
+- `port` - Server port (default: `3000`)
+- `buildDir` - Build output directory (default: `.ryunix`)
+- `server.cors` - CORS configuration
+- `server.csp` - Content Security Policy
+
+## Performance Characteristics
+
+### Native HTTP Server
+
+Built on Node.js `http` module without heavy frameworks like Express for maximum performance.
+
+### Cache Size
+
+The 50MB cache limit ensures optimal memory usage while serving frequently accessed assets from RAM.
+
+### Compression Quality
+
+Brotli quality 6 provides the best balance between compression ratio and CPU usage.
+
+## MIME Types
+
+The server supports extensive MIME type detection including:
+
+- JavaScript: `.js`, `.mjs`
+- Styles: `.css`
+- Images: `.png`, `.jpg`, `.jpeg`, `.gif`, `.svg`, `.ico`
+- Fonts: `.woff`, `.woff2`, `.ttf`, `.eot`, `.otf`
+- Media: `.mp3`, `.mp4`, `.avi`, `.mov`, `.webm`, `.ogg`, `.mkv`
+- Documents: `.pdf`, `.html`, `.json`
+- Archives: `.zip`, `.gz`, `.tar`, `.7z`, `.rar`
+
+## Security
+
+### Path Validation
+
+All request paths are validated to prevent directory traversal attacks. Invalid paths return `403 Forbidden`.
+
+### Safe Fallback
+
+The SPA fallback mechanism securely serves only the built `index.html`, preventing unauthorized file access.
+
+## Deployment
+
+The production server is designed to run in:
+
+- Docker containers
+- Traditional VPS/dedicated servers
+- Serverless environments (with adapter)
+- Kubernetes clusters
+
+### Example Deployment
+
+```dockerfile
+FROM node:20-alpine
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci --production
+COPY . .
+RUN npm run build
+EXPOSE 3000
+CMD ["npm", "start"]
+```
+
+## Monitoring
+
+Server errors are logged to `stderr`:
+
+```
+[Ryunix Server Error]: ENOENT: no such file or directory
+```
+
+## Related Commands
+
+- [`ryunix build`](/cli/build) - Build for production
+- [`ryunix dev`](/cli/dev) - Start development server

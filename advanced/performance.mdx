@@ -1,0 +1,642 @@
+---
+title: Performance Optimization
+description: Optimize your RyunixJS applications with batching, priority scheduling, lazy loading, and memoization
+---
+
+RyunixJS includes powerful performance optimization features built into the core framework. This guide covers batching, priority scheduling, concurrent rendering, lazy loading, and profiling techniques.
+
+## Update Batching
+
+Batching groups multiple state updates together to prevent unnecessary re-renders.
+
+### batchUpdates
+
+```javascript
+import { batchUpdates, useStore } from '@unsetsoft/ryunixjs'
+
+const DataGrid = () => {
+  const [rows, setRows] = useStore([])
+  const [columns, setColumns] = useStore([])
+  const [filters, setFilters] = useStore({})
+  
+  const loadData = (data) => {
+    // Without batching: 3 separate renders
+    // setRows(data.rows)
+    // setColumns(data.columns)
+    // setFilters(data.filters)
+    
+    // With batching: 1 single render
+    batchUpdates(() => {
+      setRows(data.rows)
+      setColumns(data.columns)
+      setFilters(data.filters)
+    })
+  }
+  
+  return <div>{/* ... */}</div>
+}
+```
+
+Source: `packages/core/src/lib/batching.js:11-24`
+
+**How it works:**
+
+```javascript
+let isBatching = false
+let pendingUpdates = []
+
+const batchUpdates = (callback) => {
+  const wasBatching = isBatching
+  isBatching = true
+  
+  try {
+    callback()
+  } finally {
+    isBatching = wasBatching
+    
+    if (!isBatching && pendingUpdates.length > 0) {
+      flushUpdates()
+    }
+  }
+}
+```
+
+### Automatic Batching
+
+Ryunix automatically batches updates in event handlers:
+
+```javascript
+const handleClick = () => {
+  // These are automatically batched
+  setCount(count + 1)
+  setName('John')
+  setActive(true)
+  // Only 1 re-render happens
+}
+
+<button onClick={handleClick}>Update</button>
+```
+
+<Tip>
+  Event handlers automatically batch updates. Use manual `batchUpdates()` for async operations or when updating from multiple sources.
+</Tip>
+
+## Priority Scheduling
+
+Prioritize updates based on their urgency to keep your UI responsive.
+
+### Priority Levels
+
+```javascript
+import { Priority } from '@unsetsoft/ryunixjs'
+
+const levels = {
+  IMMEDIATE: 1,      // User input (clicks, typing)
+  USER_BLOCKING: 2,  // Hover, scroll
+  NORMAL: 3,         // Data fetching
+  LOW: 4,            // Analytics
+  IDLE: 5            // Background tasks
+}
+```
+
+Source: `packages/core/src/lib/priority.js:1-10`
+
+### scheduleUpdate
+
+Schedule work with specific priority:
+
+```javascript
+import { scheduleUpdate, Priority } from '@unsetsoft/ryunixjs'
+
+const Dashboard = () => {
+  const [criticalData, setCriticalData] = useStore(null)
+  const [analytics, setAnalytics] = useStore(null)
+  
+  useEffect(() => {
+    // High priority - user is waiting
+    scheduleUpdate(() => {
+      fetchCriticalData().then(setCriticalData)
+    }, Priority.USER_BLOCKING)
+    
+    // Low priority - background task
+    scheduleUpdate(() => {
+      fetchAnalytics().then(setAnalytics)
+    }, Priority.IDLE)
+  }, [])
+  
+  return <div>{/* ... */}</div>
+}
+```
+
+Source: `packages/core/src/lib/priority.js:21-28`
+
+### runWithPriority
+
+Execute code with specific priority context:
+
+```javascript
+import { runWithPriority, Priority } from '@unsetsoft/ryunixjs'
+
+const handleUserInput = (value) => {
+  runWithPriority(Priority.IMMEDIATE, () => {
+    updateSearchQuery(value)
+    filterResults()
+  })
+}
+
+const trackAnalytics = (event) => {
+  runWithPriority(Priority.IDLE, () => {
+    sendToAnalytics(event)
+    updateLocalCache()
+  })
+}
+```
+
+Source: `packages/core/src/lib/priority.js:53-62`
+
+### Priority Dispatch
+
+Create state setters with built-in priority:
+
+```javascript
+import { createPriorityDispatch, Priority } from '@unsetsoft/ryunixjs'
+
+const MyComponent = () => {
+  const [value, setValue] = useStore(0)
+  const prioritySetValue = createPriorityDispatch(setValue)
+  
+  // User input - high priority
+  const handleInput = (e) => {
+    prioritySetValue(e.target.value, Priority.IMMEDIATE)
+  }
+  
+  // Background update - low priority  
+  const syncToServer = () => {
+    prioritySetValue(newValue, Priority.LOW)
+  }
+  
+  return <input onChange={handleInput} />
+}
+```
+
+Source: `packages/core/src/lib/priority.js:72-76`
+
+## Concurrent Rendering
+
+### Cooperative Scheduling
+
+Ryunix uses `requestIdleCallback` for cooperative scheduling:
+
+```javascript
+const workLoop = (deadline) => {
+  let shouldYield = false
+  
+  while (state.nextUnitOfWork && !shouldYield) {
+    state.nextUnitOfWork = performUnitOfWork(state.nextUnitOfWork)
+    
+    // Yield to browser if time runs out
+    shouldYield = deadline.timeRemaining() < 1
+  }
+  
+  // Schedule more work if needed
+  if (state.nextUnitOfWork) {
+    rIC(workLoop)
+  }
+}
+```
+
+Source: `packages/core/src/lib/workers.js:91-125`
+
+**Benefits:**
+- Non-blocking rendering
+- Maintains 60fps animations
+- Responds to user input during updates
+- Prevents frame drops
+
+### Work Queue
+
+Multiple updates are queued and processed efficiently:
+
+```javascript
+let workQueue = []
+let isWorkLoopScheduled = false
+
+const scheduleWork = (root, priority = Priority.NORMAL) => {
+  if (state.wipRoot) {
+    // Work in progress - queue it
+    workQueue.push(root)
+  } else {
+    // Start immediately
+    state.nextUnitOfWork = root
+    state.wipRoot = root
+  }
+  
+  if (!isWorkLoopScheduled) {
+    isWorkLoopScheduled = true
+    rIC(workLoop)
+  }
+}
+```
+
+Source: `packages/core/src/lib/workers.js:129-157`
+
+## Lazy Loading
+
+### lazy()
+
+Dynamically import components:
+
+```javascript
+import { lazy, Suspense } from '@unsetsoft/ryunixjs'
+
+// Component only loads when rendered
+const HeavyChart = lazy(() => import('./HeavyChart'))
+const AdminPanel = lazy(() => import('./AdminPanel'))
+
+const Dashboard = () => (
+  <div>
+    <h1>Dashboard</h1>
+    
+    <Suspense fallback={<div>Loading chart...</div>}>
+      <HeavyChart />
+    </Suspense>
+    
+    <Suspense fallback={<div>Loading admin...</div>}>
+      <AdminPanel />
+    </Suspense>
+  </div>
+)
+```
+
+Source: `packages/core/src/lib/lazy.js:21-75`
+
+### How Lazy Works
+
+```javascript
+const lazy = (importFn) => {
+  let status = 'pending'
+  let Component = null
+  let promise = null
+  
+  const LazyComponent = (props) => {
+    // Already loaded - render immediately
+    if (status === 'resolved' && Component) {
+      return createElement(Component, props)
+    }
+    
+    // Error - throw to error boundary
+    if (status === 'rejected' && error) {
+      throw error
+    }
+    
+    // Start loading
+    if (!promise) {
+      promise = importFn()
+        .then((module) => {
+          Component = module.default || module
+          status = 'resolved'
+        })
+        .catch((err) => {
+          error = err
+          status = 'rejected'
+        })
+    }
+    
+    // Show Suspense fallback while pending
+    return null
+  }
+  
+  return LazyComponent
+}
+```
+
+### Preloading
+
+Start loading components before they're needed:
+
+```javascript
+import { lazy, preload } from '@unsetsoft/ryunixjs'
+
+const HeavyComponent = lazy(() => import('./HeavyComponent'))
+
+// Preload on hover
+const Dashboard = () => (
+  <div
+    onMouseEnter={() => preload(() => import('./HeavyComponent'))}
+  >
+    <button onClick={() => setShowHeavy(true)}>
+      Show Component
+    </button>
+    
+    {showHeavy && (
+      <Suspense fallback={<Spinner />}>
+        <HeavyComponent />
+      </Suspense>
+    )}
+  </div>
+)
+```
+
+Source: `packages/core/src/lib/lazy.js:125-128`
+
+## Memoization
+
+### memo()
+
+Prevent re-renders when props haven't changed:
+
+```javascript
+import { memo } from '@unsetsoft/ryunixjs'
+
+// Expensive component
+const ExpensiveList = ({ items, onItemClick }) => {
+  return (
+    <ul>
+      {items.map(item => (
+        <li key={item.id} onClick={() => onItemClick(item)}>
+          {item.name}
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+// Memoized version - only re-renders if items or onItemClick change
+const MemoizedList = memo(ExpensiveList)
+
+export default MemoizedList
+```
+
+### Custom Comparison
+
+```javascript
+import { memo } from '@unsetsoft/ryunixjs'
+
+const UserCard = memo(
+  ({ user, lastSeen }) => (
+    <div>
+      <h3>{user.name}</h3>
+      <p>Last seen: {lastSeen}</p>
+    </div>
+  ),
+  (prevProps, nextProps) => {
+    // Only re-render if user.id changes
+    return prevProps.user.id === nextProps.user.id
+  }
+)
+```
+
+<Warning>
+  Don't overuse `memo()`. It adds overhead by storing previous props. Only memoize expensive components that render frequently with the same props.
+</Warning>
+
+## Reconciliation Optimization
+
+### Key Optimization
+
+Use keys for efficient list reconciliation:
+
+```javascript
+// ❌ Bad: No keys - entire list re-renders
+const BadList = ({ items }) => (
+  <ul>
+    {items.map(item => <li>{item.name}</li>)}
+  </ul>
+)
+
+// ✅ Good: Keys enable efficient updates
+const GoodList = ({ items }) => (
+  <ul>
+    {items.map(item => <li key={item.id}>{item.name}</li>)}
+  </ul>
+)
+```
+
+Key-based reconciliation from source:
+
+```javascript
+const reconcileChildren = (wipFiber, elements) => {
+  // Build map of old fibers by key
+  const oldFiberMap = new Map()
+  let oldFiber = wipFiber.alternate?.child
+  let position = 0
+  
+  while (oldFiber) {
+    const key = oldFiber.key ?? `__index_${position}__`
+    oldFiberMap.set(key, oldFiber)
+    oldFiber = oldFiber.sibling
+    position++
+  }
+  
+  // Match new elements to old fibers by key
+  elements.forEach((element, index) => {
+    const key = element.key ?? `__index_${index}__`
+    const matchedFiber = oldFiberMap.get(key)
+    
+    if (matchedFiber && element.type === matchedFiber.type) {
+      // Reuse existing fiber
+      newFiber = { ...matchedFiber, props: element.props }
+    } else {
+      // Create new fiber
+      newFiber = createNewFiber(element)
+    }
+  })
+}
+```
+
+Source: `packages/core/src/lib/reconciler.js:6-90`
+
+### Fragment Optimization
+
+Fragments avoid extra DOM nodes:
+
+```javascript
+import { Fragment } from '@unsetsoft/ryunixjs'
+
+// ❌ Bad: Extra wrapper div
+const BadComponent = () => (
+  <div>
+    <ChildA />
+    <ChildB />
+  </div>
+)
+
+// ✅ Good: No wrapper
+const GoodComponent = () => (
+  <Fragment>
+    <ChildA />
+    <ChildB />
+  </Fragment>
+)
+
+// Or use shorthand
+const BetterComponent = () => (
+  <>
+    <ChildA />
+    <ChildB />
+  </>
+)
+```
+
+## Performance Monitoring
+
+### Profiler Integration
+
+```javascript
+import { profiler, withProfiler } from '@unsetsoft/ryunixjs'
+
+// Profile component automatically
+const DataTable = withProfiler(
+  ({ data }) => {
+    return (
+      <table>
+        {data.map(row => <TableRow key={row.id} {...row} />)}
+      </table>
+    )
+  },
+  'DataTable'
+)
+
+// Check performance
+useEffect(() => {
+  profiler.logStats()
+  
+  const slowest = profiler.getSlowestComponents(5)
+  slowest.forEach(comp => {
+    if (comp.avg > 16.67) {
+      console.warn(`${comp.name} is slower than 60fps`)
+    }
+  })
+}, [data])
+```
+
+Source: `packages/core/src/lib/profiler.js:140-148`
+
+## Best Practices
+
+### 1. Batch Related Updates
+
+```javascript
+// ✅ Good: Single render
+batchUpdates(() => {
+  setUser(newUser)
+  setPermissions(newPermissions)
+  setPreferences(newPreferences)
+})
+```
+
+### 2. Use Appropriate Priority
+
+```javascript
+// Immediate: User typing in search box
+scheduleUpdate(updateSearch, Priority.IMMEDIATE)
+
+// Normal: Fetching search results
+scheduleUpdate(fetchResults, Priority.NORMAL)
+
+// Idle: Logging analytics
+scheduleUpdate(trackSearch, Priority.IDLE)
+```
+
+### 3. Lazy Load Heavy Components
+
+```javascript
+const Charts = lazy(() => import('./Charts'))
+const AdminTools = lazy(() => import('./AdminTools'))
+
+// Only load when needed
+if (showCharts) {
+  return (
+    <Suspense fallback={<Spinner />}>
+      <Charts />
+    </Suspense>
+  )
+}
+```
+
+### 4. Memoize Expensive Computations
+
+```javascript
+import { useMemo } from '@unsetsoft/ryunixjs'
+
+const Dashboard = ({ data }) => {
+  // Only recalculate when data changes
+  const stats = useMemo(() => {
+    return calculateExpensiveStats(data)
+  }, [data])
+  
+  return <StatsDisplay stats={stats} />
+}
+```
+
+### 5. Use Keys for Lists
+
+```javascript
+// ✅ Always use stable, unique keys
+{items.map(item => (
+  <Item key={item.id} {...item} />
+))}
+
+// ❌ Never use index as key (if list can reorder)
+{items.map((item, index) => (
+  <Item key={index} {...item} /> // Bad!
+))}
+```
+
+## Performance Checklist
+
+- [ ] Batch multiple state updates
+- [ ] Use appropriate priority levels
+- [ ] Lazy load code-split components
+- [ ] Memoize expensive components with `memo()`
+- [ ] Use `useMemo()` for expensive calculations
+- [ ] Add keys to list items
+- [ ] Profile components with `profiler`
+- [ ] Monitor slowest components
+- [ ] Keep components small and focused
+- [ ] Avoid inline function definitions in JSX
+- [ ] Use fragments to reduce DOM nodes
+- [ ] Implement virtual scrolling for long lists
+
+## Measuring Performance
+
+### Development Profiling
+
+```javascript
+import { profiler } from '@unsetsoft/ryunixjs'
+
+// Start profiling
+profiler.enable()
+
+// Use your app...
+
+// Check results
+profiler.logStats()
+
+const slowest = profiler.getSlowestComponents(10)
+console.table(slowest)
+
+// Clear and start fresh
+profiler.clear()
+```
+
+### Production Monitoring
+
+```javascript
+// Send metrics to analytics
+if (typeof window !== 'undefined' && window.performance) {
+  window.addEventListener('load', () => {
+    const metrics = {
+      fcp: performance.getEntriesByName('first-contentful-paint')[0],
+      lcp: performance.getEntriesByName('largest-contentful-paint')[0],
+      fid: performance.getEntriesByName('first-input')[0]
+    }
+    
+    sendToAnalytics(metrics)
+  })
+}
+```
+
+<Tip>
+  Focus on Core Web Vitals: LCP (Largest Contentful Paint), FID (First Input Delay), and CLS (Cumulative Layout Shift) for the best user experience.
+</Tip>
