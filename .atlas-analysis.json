@@ -1,0 +1,182 @@
+{
+  "projectType": "framework",
+  "projectName": "RyunixJS",
+  "projectDescription": "A modular JavaScript UI framework powered by a custom reconciliation engine and robust Webpack build system for high-performance SSR and static site generation.",
+  "theme": "aspen",
+  "primaryColor": "#3B82F6",
+  "lightColor": "#60A5FA",
+  "darkColor": "#2563EB",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "installation",
+              "quickstart"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "core/architecture",
+              "core/components",
+              "core/hooks",
+              "core/virtual-dom-reconciliation",
+              "core/rendering",
+              "core/state-priority"
+            ]
+          },
+          {
+            "group": "Webpack Build System",
+            "pages": [
+              "webpack/overview",
+              "webpack/cli-server",
+              "webpack/configuration",
+              "webpack/routing-ssr-ssg",
+              "webpack/server-actions",
+              "webpack/loaders"
+            ]
+          },
+          {
+            "group": "Advanced",
+            "pages": [
+              "advanced/devtools-profiler",
+              "advanced/server-components",
+              "advanced/islands-hydration",
+              "advanced/performance"
+            ]
+          },
+          {
+            "group": "Packages",
+            "pages": [
+              "packages/core",
+              "packages/presets",
+              "packages/cra",
+              "packages/devtools"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Core API",
+            "pages": [
+              "api/createElement",
+              "api/render",
+              "api/server-rendering"
+            ]
+          },
+          {
+            "group": "Hooks",
+            "pages": [
+              "api/hooks/use-store",
+              "api/hooks/use-reducer",
+              "api/hooks/use-effect",
+              "api/hooks/use-memo-callback",
+              "api/hooks/use-ref",
+              "api/hooks/use-context",
+              "api/hooks/use-transition",
+              "api/hooks/use-router",
+              "api/hooks/use-metadata"
+            ]
+          },
+          {
+            "group": "Components",
+            "pages": [
+              "api/components/error-boundary",
+              "api/components/suspense",
+              "api/components/lazy",
+              "api/components/server-boundary",
+              "api/components/portal"
+            ]
+          },
+          {
+            "group": "Utilities",
+            "pages": [
+              "api/utilities/memo",
+              "api/utilities/batch-updates",
+              "api/utilities/priority",
+              "api/utilities/profiler"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "CLI Reference",
+        "groups": [
+          {
+            "group": "Commands",
+            "pages": [
+              "cli/dev",
+              "cli/build",
+              "cli/start",
+              "cli/lint"
+            ]
+          },
+          {
+            "group": "Create Ryunix App",
+            "pages": [
+              "cli/cra"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Custom reconciliation engine with virtual DOM",
+    "Comprehensive Hooks API (useStore, useEffect, useContext, etc.)",
+    "Built-in SSR and SSG support",
+    "Server Components and Server Actions",
+    "File-system based routing",
+    "Native MDX support",
+    "Concurrent mode with priority scheduling",
+    "DevTools browser extension",
+    "Zero dependencies core library",
+    "Webpack-powered build system"
+  ],
+  "publicApiSurface": [
+    "createElement",
+    "Fragment",
+    "render",
+    "hydrate",
+    "hydrateIslands",
+    "renderToString",
+    "renderToReadableStream",
+    "useStore",
+    "useReducer",
+    "usePersistentStore",
+    "useEffect",
+    "useLayoutEffect",
+    "useMemo",
+    "useCallback",
+    "useRef",
+    "createContext",
+    "useTransition",
+    "useDeferredValue",
+    "useRouter",
+    "usePathname",
+    "useSearchParams",
+    "useHash",
+    "useMetadata",
+    "memo",
+    "lazy",
+    "Suspense",
+    "preload",
+    "ErrorBoundary",
+    "ServerBoundary",
+    "createPortal",
+    "batchUpdates",
+    "Priority",
+    "profiler",
+    "useProfiler",
+    "forwardRef",
+    "createActionProxy"
+  ]
+}
